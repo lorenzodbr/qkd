@@ -6,7 +6,7 @@ from qiskit_aer import QasmSimulator
 alice = bob = eve = None  # Istanze degli agenti
 simulator = QasmSimulator()  # Simulatore per la misura dei qubit
 qubit = None  # Qubit da inviare
-n = 8  # Lunghezza della chiave (finale)
+n = 4  # Lunghezza della chiave (finale)
 delta = 1  # Fattore di ridondanza
 extended_key_length = (4 + delta) * n  # Lunghezza della chiave con ridondanza
 
@@ -104,7 +104,8 @@ class Bob:
 
         if len(self.matching_bases) < 2 * n:
             print(
-                f"\n\nLe basi che corrispondono ({len(self.matching_bases)}) sono minori di {2 * n}. La comunicazione viene interrotta."
+                f"\n\nLe basi che corrispondono ({len(self.matching_bases)}) sono minori di {2 * n}."
+                + "Non è possibile continuare."
             )
 
             exit(1)
@@ -200,7 +201,11 @@ def generate_key(with_eve=False):
 def split_valid_indices():
     # Vengono selezionati 2 * n indici casuali tra quelli delle basi corrispondenti
     work_indices = np.random.choice(bob.get_matching_bases(), 2 * n, replace=False)
+    discarded_indices = np.setdiff1d(bob.get_matching_bases(), work_indices)
     np.random.shuffle(work_indices)
+
+    if len(discarded_indices) > 0:
+        print(f"\nIndici non selezionati: \t{discarded_indices}")
 
     # Gli indici validi vengono divisi in due gruppi: uno per la chiave...
     key_indices = work_indices[:n]
@@ -212,7 +217,7 @@ def split_valid_indices():
     check_indices.sort()
     print(f"Indici per il controllo: \t{check_indices}\n")
 
-    return key_indices, check_indices
+    return key_indices, check_indices, discarded_indices
 
 
 def check_intrusion(key_indices, check_indices):
@@ -224,7 +229,7 @@ def check_intrusion(key_indices, check_indices):
         # Se non sta venendo rilevata alcuna intrusione, si costruisce la chiave
         if not intrusion_detected:
             key += str(bob.get_matching_key()[key_indices[i]])
-        else:
+        elif key is not None:
             key = None
 
         # Controllo se i bit resi noti da Alice e Bob sono diversi
@@ -238,7 +243,7 @@ def check_intrusion(key_indices, check_indices):
     return intrusion_detected, np.array(mismatched_indices), key
 
 
-def check_false_negative(mismatched_indices, key_indices):
+def check_false_negative(mismatched_indices, key_indices, discarded_indices):
     # Verifica se si è trattato di un falso negativo: poiché la scelta dei bit di controllo è casuale,
     # questa potrebbe aver portato a non selezionare bit che avrebbero potuto rivelare l'intrusione
 
@@ -246,12 +251,19 @@ def check_false_negative(mismatched_indices, key_indices):
     for i in range(n):
         if bob.get_matching_key()[key_indices[i]] != alice.get_key()[key_indices[i]]:
             mismatched_indices.append(key_indices[i])
-            
+
+    for i in range(len(discarded_indices)):
+        if (
+            bob.get_matching_key()[discarded_indices[i]]
+            != alice.get_key()[discarded_indices[i]]
+        ):
+            mismatched_indices.append(discarded_indices[i])
+
     mismatched_indices = np.array(mismatched_indices)
 
     if len(mismatched_indices) > 0:
         print(
-            f"Falso negativo! I bit negli indici {mismatched_indices} non corrispondono, ma non sono stati selezionati per il controllo."
+            f"Falso negativo! I bit negli indici {mismatched_indices} non corrispondono, ma non sono stati utilizzati per il controllo (non selezionati o utilizzati per la chiave)"
         )
 
 
@@ -280,7 +292,7 @@ def main(with_eve=False):
     # Fase di confronto delle basi
     bob.check_bases_match()
 
-    key_indices, check_indices = split_valid_indices()
+    key_indices, check_indices, discarded_indices = split_valid_indices()
 
     intrusion_detected, mismatched_indices, key = check_intrusion(
         key_indices, check_indices
@@ -289,7 +301,7 @@ def main(with_eve=False):
     if not intrusion_detected:
         print(f"Chiave ({len(key)} bit):\t\t\t{key}")
 
-        check_false_negative(mismatched_indices, key_indices)
+        check_false_negative(mismatched_indices, key_indices, discarded_indices)
     else:
         mismatched_indices.sort()
         print(
