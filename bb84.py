@@ -5,7 +5,7 @@ from qiskit_aer import QasmSimulator
 
 alice = bob = eve = None  # Istanze degli agenti
 simulator = QasmSimulator()  # Simulatore per la misura dei qubit
-qubit = None  # Circuito quantistico
+qubit = None  # Qubit da inviare
 n = 8  # Lunghezza della chiave (finale)
 delta = 1  # Fattore di ridondanza
 extended_key_length = (4 + delta) * n  # Lunghezza della chiave con ridondanza
@@ -246,6 +246,8 @@ def check_false_negative(mismatched_indices, key_indices):
     for i in range(n):
         if bob.get_matching_key()[key_indices[i]] != alice.get_key()[key_indices[i]]:
             mismatched_indices.append(key_indices[i])
+            
+    mismatched_indices = np.array(mismatched_indices)
 
     if len(mismatched_indices) > 0:
         print(
@@ -297,4 +299,4 @@ def main(with_eve=False):
 
 if __name__ == "__main__":
     # Impostare il flag `with_eve` a True per includere Eve, False per escluderla
-    main(with_eve=False)
+    main(with_eve=True)
