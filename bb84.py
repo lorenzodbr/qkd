@@ -8,21 +8,21 @@ simulator = QasmSimulator()  # Simulatore per la misura dei qubit
 qubit = None  # Qubit da inviare
 n = 4  # Lunghezza della chiave (finale)
 delta = 1  # Fattore di ridondanza
-extended_key_length = (4 + delta) * n  # Lunghezza della chiave con ridondanza
+b = (4 + delta) * n  # Lunghezza della chiave con ridondanza
 
 
 class Alice:
     def __init__(self):
         print(
-            f"\n[{type(self).__name__}] Generazione di {extended_key_length} bit casuali per la chiave..."
+            f"\n[{type(self).__name__}] Generazione di {b} bit casuali per la chiave..."
         )
         print(
-            f"[{type(self).__name__}] Generazione di {extended_key_length} basi casuali..."
+            f"[{type(self).__name__}] Generazione di {b} basi casuali..."
         )
         self.bases = randint(
-            2, size=extended_key_length
+            2, size=b
         )  # 0: Computazionale, 1: Hadamard
-        self.key = randint(2, size=extended_key_length)  # Bit casuali per la chiave
+        self.key = randint(2, size=b)  # Bit casuali per la chiave
 
     def get_key(self):
         return self.key
@@ -30,34 +30,29 @@ class Alice:
     def get_bases(self):
         return self.bases
 
-    def encode_bit(self, bit, base):
-        """Codifica un bit di Alice in base scelta."""
-
+    def encode_bit(self, bit, basis):
         global qubit
-
         qubit = QuantumCircuit(1, 1)
 
         if bit == 1:
-            qubit.x(0)  # Applica NOT se il bit è 1 (default è 0)
-        if base == 1:
+            qubit.x(0)  # Applica NOT se il bit è 1
+        if basis == 1:
             qubit.h(0)  # Applica Hadamard se in base Hadamard
 
     def send(self, i):
-        """Invia un qubit codificato a Bob."""
-
         self.encode_bit(self.key[i], self.bases[i])
 
 
 class Bob:
     def __init__(self):
         print(
-            f"[{type(self).__name__}] Generazione di {extended_key_length} basi casuali..."
+            f"[{type(self).__name__}] Generazione di {b} basi casuali..."
         )
         self.bases = randint(
-            2, size=extended_key_length
+            2, size=b
         )  # 0: Computazionale, 1: Hadamard
-        self.received_key = np.zeros(extended_key_length, dtype=int)
-        self.matching_key = np.zeros(extended_key_length, dtype=int)
+        self.received_key = np.zeros(b, dtype=int)
+        self.matching_key = np.zeros(b, dtype=int)
         self.matching_bases = []
 
     def get_bases(self):
@@ -72,19 +67,17 @@ class Bob:
     def get_matching_bases(self):
         return self.matching_bases
 
-    def measure(self, base, simulator):
-        """Bob misura il qubit nella sua base scelta."""
-
+    def measure(self, basis):
         global qubit
 
-        if base == 1:
-            qubit.h(0)  # Cambia base se necessario
+        if basis == 1:
+            qubit.h(0)  # Cambio base se necessario
 
-        qubit.measure(0, 0)  # Misura il qubit
+        qubit.measure(0, 0)  # Misura del qubit
 
         # Simulazione
-        transpiled_circuit = transpile(qubit, simulator)
-        counts = simulator.run(transpiled_circuit).result().get_counts()
+        transpiled = transpile(qubit, simulator)
+        counts = simulator.run(transpiled).result().get_counts()
         measured_bit = max(counts, key=counts.get)
 
         print(measured_bit, end=" ", flush=True)
@@ -92,10 +85,10 @@ class Bob:
         return measured_bit
 
     def receive(self, i):
-        self.received_key[i] = self.measure(self.bases[i], simulator)
+        self.received_key[i] = self.measure(self.bases[i])
 
     def check_bases_match(self):
-        for i in range(extended_key_length):
+        for i in range(b):
             if alice.get_bases()[i] == self.bases[i]:
                 self.matching_bases.append(i)
                 self.matching_key[i] = self.received_key[i]
@@ -122,17 +115,15 @@ class Bob:
 
 
 class Eve:
-    global qubit
-
     def __init__(self):
         print(
-            f"[{type(self).__name__}] Generazione di {extended_key_length} basi casuali..."
+            f"[{type(self).__name__}] Generazione di {b} basi casuali..."
         )
 
         self.bases = randint(
-            2, size=extended_key_length
+            2, size=b
         )  # 0: Computazionale, 1: Hadamard
-        self.intercepted_key = np.zeros(extended_key_length, dtype=int)
+        self.intercepted_key = np.zeros(b, dtype=int)
 
     def get_bases(self):
         return self.bases
@@ -140,23 +131,23 @@ class Eve:
     def get_intercepted_key(self):
         return self.intercepted_key
 
-    def measure(self, base, simulator):
-        """Eve misura il qubit nel suo caso base (interferenza)."""
+    def measure(self, basis):
+        global qubit
+        
+        if basis == 1:
+            qubit.h(0)  # Cambio base se necessario
 
-        if base == 1:
-            qubit.h(0)  # Cambia base se necessario
-
-        qubit.measure(0, 0)  # Misura il qubit
+        qubit.measure(0, 0)  # Misura del qubit
 
         # Intercettazione del qubit e misura
-        transpiled_circuit = transpile(qubit, simulator)
-        counts = simulator.run(transpiled_circuit).result().get_counts()
+        transpiled = transpile(qubit, simulator)
+        counts = simulator.run(transpiled).result().get_counts()
         measured_bit = max(counts, key=counts.get)
 
         return measured_bit
 
     def intercept(self, i):
-        self.intercepted_key[i] = self.measure(self.bases[i], simulator)
+        self.intercepted_key[i] = self.measure(self.bases[i])
 
     def print_intercepted_key(self):
         print(f"\x1b[1D]\nChiave intercettata da Eve: \t{self.intercepted_key}", end="")
@@ -167,12 +158,10 @@ def print_parameters():
     print("Parametri:")
     print(f"  * Lunghezza della chiave: {n} bit")
     print(f"  * Fattore di ridondanza: {delta}")
-    print(f"  * Lunghezza della chiave estesa: {extended_key_length} bit")
+    print(f"  * Lunghezza della chiave estesa: {b} bit")
 
 
 def generate_key(with_eve=False):
-    """Genera i bit casuali e le basi per Alice, Bob e opzionalmente Eve."""
-
     alice = Alice()
     eve = Eve() if with_eve else None
     bob = Bob()
@@ -276,7 +265,7 @@ def main(with_eve=False):
     print("\nChiave ricevuta da Bob: \t[", end="")
 
     # Fase di scambio della chiave
-    for i in range(extended_key_length):
+    for i in range(b):
         alice.send(i)
 
         # Se c'è Eve, intercetta e misura il qubit
