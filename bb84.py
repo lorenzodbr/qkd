@@ -3,60 +3,67 @@ from numpy.random import randint
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import QasmSimulator
 
-alice = bob = eve = None  # Istanze degli agenti
-simulator = QasmSimulator()  # Simulatore per la misura dei qubit
-qubit = None  # Qubit da inviare
-n = 4  # Lunghezza della chiave (finale)
-delta = 1  # Fattore di ridondanza
-b = (4 + delta) * n  # Lunghezza della chiave con ridondanza
+alice = bob = eve = None  # Instances of the three parties
+backend = QasmSimulator()  # Backend instance for simulation
+qubit = None  # Qubit to be sent
+n = 6  # Final key length
+delta = 1  # Redundancy factor
+b = (4 + delta) * n  # Key length with redundancy
 
 
 class Alice:
     def __init__(self):
-        print(
-            f"\n[{type(self).__name__}] Generazione di {b} bit casuali per la chiave..."
-        )
-        print(
-            f"[{type(self).__name__}] Generazione di {b} basi casuali..."
-        )
-        self.bases = randint(
-            2, size=b
-        )  # 0: Computazionale, 1: Hadamard
-        self.key = randint(2, size=b)  # Bit casuali per la chiave
+        print(f"\n[{type(self).__name__}] Generating {b} random bits for the key...")
+        print(f"[{type(self).__name__}] Generating {b} random bases for the qubits...")
+        self.bases = randint(2, size=b)  # 0: Computational basis, 1: Hadamard basis
+        self.key = randint(2, size=b)  # Random bits for the key
 
     def get_key(self):
         return self.key
 
+    def print_key(self):
+        print(f"\nKey:\t\t\t\t{self.key}\n")
+
     def get_bases(self):
         return self.bases
 
-    def encode_bit(self, bit, basis):
+    def print_bases(self):
+        print(
+            "Alice's bases:\t\t\t["
+            + " ".join(["C" if b == 0 else "H" for b in self.bases])
+            + "]"
+        )
+
+    def encode(self, bit, basis):
         global qubit
         qubit = QuantumCircuit(1, 1)
 
         if bit == 1:
-            qubit.x(0)  # Applica NOT se il bit è 1
+            qubit.x(0)  # Apply NOT gate if bit is 1
         if basis == 1:
-            qubit.h(0)  # Applica Hadamard se in base Hadamard
+            qubit.h(0)  # Apply Hadamard gate if basis is 1 (Hadamard basis)
 
     def send(self, i):
-        self.encode_bit(self.key[i], self.bases[i])
+        self.encode(self.key[i], self.bases[i])
 
 
 class Bob:
     def __init__(self):
-        print(
-            f"[{type(self).__name__}] Generazione di {b} basi casuali..."
-        )
-        self.bases = randint(
-            2, size=b
-        )  # 0: Computazionale, 1: Hadamard
-        self.received_key = np.zeros(b, dtype=int)
-        self.matching_key = np.zeros(b, dtype=int)
-        self.matching_bases = []
+        print(f"[{type(self).__name__}] Generating {b} random bases for the qubits...")
+        self.bases = randint(2, size=b)  # 0: Computational basis, 1: Hadamard basis
+        self.received_key = np.zeros(b, dtype=int)  # Key received from Alice
+        self.matching_key = np.zeros(b, dtype=int)  # Key bits of matching bases
+        self.matching_bases = []  # Indices of matching bases
 
     def get_bases(self):
         return self.bases
+
+    def print_bases(self):
+        print(
+            "Bob's bases:\t\t\t["
+            + " ".join(["C" if b == 0 else "H" for b in self.bases])
+            + "]"
+        )
 
     def get_received_key(self):
         return self.received_key
@@ -71,13 +78,13 @@ class Bob:
         global qubit
 
         if basis == 1:
-            qubit.h(0)  # Cambio base se necessario
+            qubit.h(0)  # Change basis if necessary
 
-        qubit.measure(0, 0)  # Misura del qubit
+        qubit.measure(0, 0)  # Measurement device
 
-        # Simulazione
-        transpiled = transpile(qubit, simulator)
-        counts = simulator.run(transpiled).result().get_counts()
+        # Simulation of the qubit measurement
+        transpiled = transpile(qubit, backend)
+        counts = backend.run(transpiled).result().get_counts()
         measured_bit = max(counts, key=counts.get)
 
         print(measured_bit, end=" ", flush=True)
@@ -93,55 +100,60 @@ class Bob:
                 self.matching_bases.append(i)
                 self.matching_key[i] = self.received_key[i]
             else:
-                self.matching_key[i] = -1  # Indica che la base non corrisponde
+                self.matching_key[i] = -1  # Value to indicate mismatch
 
-        if len(self.matching_bases) < 2 * n:
+        matching_bases_count = len(self.matching_bases)
+
+        if matching_bases_count < 2 * n:
             print(
-                f"\n\nLe basi che corrispondono ({len(self.matching_bases)}) sono minori di {2 * n}."
-                + "Non è possibile continuare."
+                f"\n\nMatching bases count ({matching_bases_count}) is less than {2 * n}."
+                + " Cannot proceed with the key exchange."
             )
 
             exit(1)
         else:
-            print(
-                f"\x1b[1D]\nChiave selezionata da Bob: \t[{' '.join([str(b) if b > -1 else '-' for b in self.matching_key])}]"
-            )
-
             self.matching_bases = np.array(self.matching_bases)
 
             print(
-                f"\nBasi corrispondenti ({len(self.matching_bases)}): \t{self.matching_bases}"
+                f"\x1b[1D]\n\nMatching bases ({matching_bases_count} ≥ {2 * n}): \t{self.matching_bases}"
+                + f"\n\nBits kept by Bob: \t\t[{' '.join([str(b) if b > -1 else '-' for b in self.matching_key])}]"
             )
 
 
 class Eve:
     def __init__(self):
-        print(
-            f"[{type(self).__name__}] Generazione di {b} basi casuali..."
-        )
+        print(f"[{type(self).__name__}] Generating random {b} bases for the qubits...")
 
-        self.bases = randint(
-            2, size=b
-        )  # 0: Computazionale, 1: Hadamard
+        self.bases = randint(2, size=b)  # 0: Computational basis, 1: Hadamard basis
         self.intercepted_key = np.zeros(b, dtype=int)
 
     def get_bases(self):
         return self.bases
 
+    def print_bases(self):
+        print(
+            "Eve's bases:\t\t\t["
+            + " ".join(["C" if b == 0 else "H" for b in self.bases])
+            + "]"
+        )
+
     def get_intercepted_key(self):
         return self.intercepted_key
 
+    def print_intercepted_key(self):
+        print(f"\x1b[1D]\nKey intercepted by Eve: \t{self.intercepted_key}", end="")
+
     def measure(self, basis):
         global qubit
-        
+
         if basis == 1:
-            qubit.h(0)  # Cambio base se necessario
+            qubit.h(0)  # Basis change if necessary
 
-        qubit.measure(0, 0)  # Misura del qubit
+        qubit.measure(0, 0)  # Measurement device
 
-        # Intercettazione del qubit e misura
-        transpiled = transpile(qubit, simulator)
-        counts = simulator.run(transpiled).result().get_counts()
+        # Interception of the qubit and measurement
+        transpiled = transpile(qubit, backend)
+        counts = backend.run(transpiled).result().get_counts()
         measured_bit = max(counts, key=counts.get)
 
         return measured_bit
@@ -149,16 +161,13 @@ class Eve:
     def intercept(self, i):
         self.intercepted_key[i] = self.measure(self.bases[i])
 
-    def print_intercepted_key(self):
-        print(f"\x1b[1D]\nChiave intercettata da Eve: \t{self.intercepted_key}", end="")
-
 
 def print_parameters():
     np.set_printoptions(linewidth=300)
-    print("Parametri:")
-    print(f"  * Lunghezza della chiave: {n} bit")
-    print(f"  * Fattore di ridondanza: {delta}")
-    print(f"  * Lunghezza della chiave estesa: {b} bit")
+    print("Parameters:")
+    print(f"  * Key length (n): {n} bits")
+    print(f"  * Redundancy factor (δ): {delta}")
+    print(f"  * Extended key length (b): {b} bits")
 
 
 def generate_key(with_eve=False):
@@ -166,45 +175,35 @@ def generate_key(with_eve=False):
     eve = Eve() if with_eve else None
     bob = Bob()
 
-    print(f"\nChiave:\t\t\t\t{alice.get_key()}\n")
-    print(
-        "Basi di Alice:\t\t\t["
-        + " ".join(["C" if b == 0 else "H" for b in alice.get_bases()])
-        + "]"
-    )
+    alice.print_key()
+    alice.print_bases()
+
     if with_eve:
-        print(
-            "Basi di Eve:\t\t\t["
-            + " ".join(["C" if b == 0 else "H" for b in eve.get_bases()])
-            + "]"
-        )
-    print(
-        "Basi di Bob:\t\t\t["
-        + " ".join(["C" if b == 0 else "H" for b in bob.get_bases()])
-        + "]"
-    )
+        eve.print_bases()
+
+    bob.print_bases()
 
     return alice, bob, eve
 
 
 def split_valid_indices():
-    # Vengono selezionati 2 * n indici casuali tra quelli delle basi corrispondenti
+    # 2 * n random indices are selected among those of the matching bases
     work_indices = np.random.choice(bob.get_matching_bases(), 2 * n, replace=False)
     discarded_indices = np.setdiff1d(bob.get_matching_bases(), work_indices)
     np.random.shuffle(work_indices)
 
     if len(discarded_indices) > 0:
-        print(f"\nIndici non selezionati: \t{discarded_indices}")
+        print(f"\nIndices of discarded bits: \t{discarded_indices}")
 
-    # Gli indici validi vengono divisi in due gruppi: uno per la chiave...
+    # Valid indices are split into two sets: one for the key...
     key_indices = work_indices[:n]
     key_indices.sort()
-    print(f"Indici per la chiave: \t\t{key_indices}")
+    print(f"Indices of key bits: \t\t{key_indices}")
 
-    # ...l'altro per il controllo
+    # ...and one for the check bits
     check_indices = work_indices[n:]
     check_indices.sort()
-    print(f"Indici per il controllo: \t{check_indices}\n")
+    print(f"Indices of check bits: \t\t{check_indices}\n")
 
     return key_indices, check_indices, discarded_indices
 
@@ -215,13 +214,13 @@ def check_intrusion(key_indices, check_indices):
     key = ""
 
     for i in range(n):
-        # Se non sta venendo rilevata alcuna intrusione, si costruisce la chiave
+        # If no intrusion is being detected, the key is built
         if not intrusion_detected:
             key += str(bob.get_matching_key()[key_indices[i]])
         elif key is not None:
             key = None
 
-        # Controllo se i bit resi noti da Alice e Bob sono diversi
+        # Check if the bits revealed by Alice and Bob are different
         if (
             bob.get_matching_key()[check_indices[i]]
             != alice.get_key()[check_indices[i]]
@@ -229,18 +228,23 @@ def check_intrusion(key_indices, check_indices):
             intrusion_detected = True
             mismatched_indices.append(check_indices[i])
 
+    mismatched_indices.sort()
+
     return intrusion_detected, np.array(mismatched_indices), key
 
 
 def check_false_negative(mismatched_indices, key_indices, discarded_indices):
-    # Verifica se si è trattato di un falso negativo: poiché la scelta dei bit di controllo è casuale,
-    # questa potrebbe aver portato a non selezionare bit che avrebbero potuto rivelare l'intrusione
+    # Verify if it was a false negative: since the choice of the check bits is random,
+    # this could have led to not selecting bits that could have revealed the intrusion
 
     mismatched_indices = []
+
+    # Check if the bits that do not match are among the key bits...
     for i in range(n):
         if bob.get_matching_key()[key_indices[i]] != alice.get_key()[key_indices[i]]:
             mismatched_indices.append(key_indices[i])
 
+    # ...or among the discarded/extra bits
     for i in range(len(discarded_indices)):
         if (
             bob.get_matching_key()[discarded_indices[i]]
@@ -252,7 +256,7 @@ def check_false_negative(mismatched_indices, key_indices, discarded_indices):
 
     if len(mismatched_indices) > 0:
         print(
-            f"Falso negativo! I bit negli indici {mismatched_indices} non corrispondono, ma non sono stati utilizzati per il controllo (non selezionati o utilizzati per la chiave)"
+            f"False negative! Bits in {mismatched_indices} do not match, but were not used for the check (not selected or used for the key)"
         )
 
 
@@ -262,25 +266,26 @@ def main(with_eve=False):
     global alice, bob, eve
     alice, bob, eve = generate_key(with_eve)
 
-    print("\nChiave ricevuta da Bob: \t[", end="")
+    print("\nKey received by Bob: \t\t[", end="")
 
-    # Fase di scambio della chiave
+    # Key exchange phase
     for i in range(b):
         alice.send(i)
 
-        # Se c'è Eve, intercetta e misura il qubit
+        # If Eve is present, she intercepts the qubit
         if with_eve:
             eve.intercept(i)
 
-        # Bob misura il qubit nella base scelta
+        # Bob measures the qubit in the chosen basis
         bob.receive(i)
 
     if with_eve:
         eve.print_intercepted_key()
 
-    # Fase di confronto delle basi
+    # Bases comparison phase
     bob.check_bases_match()
 
+    # If enough bases match, the key is split into key and check bits
     key_indices, check_indices, discarded_indices = split_valid_indices()
 
     intrusion_detected, mismatched_indices, key = check_intrusion(
@@ -288,16 +293,13 @@ def main(with_eve=False):
     )
 
     if not intrusion_detected:
-        print(f"Chiave ({len(key)} bit):\t\t\t{key}")
+        print(f"Key ({len(key)} bits):\t\t\t{key}")
 
         check_false_negative(mismatched_indices, key_indices, discarded_indices)
     else:
-        mismatched_indices.sort()
-        print(
-            f"Intrusione rilevata! Gli indici dei bit non corrispondenti sono: {mismatched_indices}"
-        )
+        print(f"Intrusion detected! Bits at indices {mismatched_indices} do not match.")
 
 
 if __name__ == "__main__":
-    # Impostare il flag `with_eve` a True per includere Eve, False per escluderla
+    # Set `with_eve` to `True` to include Eve in the simulation
     main(with_eve=True)
