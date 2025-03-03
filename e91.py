@@ -191,40 +191,30 @@ def measure(i):
 
 
 def calc_CHSH():
-    CHSH = []
+    S = -1
 
     for i in range(0, len(counts), 4):
-        theta_dict = counts[i : i + 4]
-        zz = theta_dict[0]
-        zx = theta_dict[1]
-        xz = theta_dict[2]
-        xx = theta_dict[3]
+        zz, zx, xz, xx = counts[i : i + 4]
 
-        num_shots = sum(xx[y] for y in xx)
+        num_shots = sum(xx.values())
 
-        chsh1 = 0
+        if num_shots == 0:
+            continue
 
-        for element in zz:
-            parity = (-1) ** (int(element[0]) + int(element[1]))
-            chsh1 += parity * zz[element]
+        chsh = sum(
+            (-1) ** (int(key[0]) + int(key[1]))
+            * (zz.get(key, 0) - zx.get(key, 0) + xz.get(key, 0) + xx.get(key, 0))
+            for key in set(zz)
+            | set(zx)
+            | set(xz)
+            | set(xx)
+        )
 
-        for element in zx:
-            parity = (-1) ** (int(element[0]) + int(element[1]))
-            chsh1 -= parity * zx[element]
+        candidate = abs(chsh / num_shots)
 
-        for element in xz:
-            parity = (-1) ** (int(element[0]) + int(element[1]))
-            chsh1 += parity * xz[element]
+        S = max(S, candidate)
 
-        for element in xx:
-            parity = (-1) ** (int(element[0]) + int(element[1]))
-            chsh1 += parity * xx[element]
-
-        CHSH.append(abs(chsh1 / num_shots))
-
-    S = max(CHSH)
     print(f"\nCHSH value (S):\t\t {S:.3f}")
-
     return S
 
 
@@ -279,4 +269,4 @@ def main(with_eve=False):
 
 if __name__ == "__main__":
     # Set `with_eve` to `True` to include Eve in the simulation
-    main(with_eve=False)
+    main(with_eve=True)
