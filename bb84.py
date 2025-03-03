@@ -1,5 +1,6 @@
 import numpy as np
-from numpy.random import randint
+from numpy import setdiff1d
+from numpy.random import randint, choice, shuffle
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import QasmSimulator
 
@@ -115,7 +116,8 @@ class Bob:
             self.matching_bases = np.array(self.matching_bases)
 
             print(
-                f"\x1b[1D]\n\nMatching bases ({matching_bases_count} ≥ {2 * n}): \t{self.matching_bases}"
+                f"\nMatching bases count: \t\t{matching_bases_count} ≥ {2 * n}"
+                + f"\x1b[1D]\n\nMatching bases indices: \t{self.matching_bases}"
                 + f"\n\nBits kept by Bob: \t\t[{' '.join([str(b) if b > -1 else '-' for b in self.matching_key])}]"
             )
 
@@ -186,11 +188,11 @@ def generate_key(with_eve=False):
     return alice, bob, eve
 
 
-def split_valid_indices():
+def choose_and_split_indices():
     # 2 * n random indices are selected among those of the matching bases
-    work_indices = np.random.choice(bob.get_matching_bases(), 2 * n, replace=False)
-    discarded_indices = np.setdiff1d(bob.get_matching_bases(), work_indices)
-    np.random.shuffle(work_indices)
+    work_indices = choice(bob.get_matching_bases(), 2 * n, replace=False)
+    discarded_indices = setdiff1d(bob.get_matching_bases(), work_indices)
+    shuffle(work_indices)
 
     if len(discarded_indices) > 0:
         print(f"\nIndices of discarded bits: \t{discarded_indices}")
@@ -270,6 +272,7 @@ def main(with_eve=False):
 
     # Key exchange phase
     for i in range(b):
+        # Alice sends the qubit to Bob in the chosen basis
         alice.send(i)
 
         # If Eve is present, she intercepts the qubit
@@ -286,7 +289,7 @@ def main(with_eve=False):
     bob.check_bases_match()
 
     # If enough bases match, the key is split into key and check bits
-    key_indices, check_indices, discarded_indices = split_valid_indices()
+    key_indices, check_indices, discarded_indices = choose_and_split_indices()
 
     intrusion_detected, mismatched_indices, key = check_intrusion(
         key_indices, check_indices
