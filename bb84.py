@@ -1,10 +1,10 @@
 import numpy as np
-from numpy import setdiff1d
+from numpy import setdiff1d, zeros, array
 from numpy.random import randint, choice, shuffle
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import QasmSimulator
 
-alice = bob = eve = None  # Instances of the three parties
+alice = bob = eve = None  # Instances of the three agents
 backend = QasmSimulator()  # Backend instance for simulation
 qubit = None  # Qubit to be sent
 n = 6  # Final key length
@@ -52,8 +52,8 @@ class Bob:
     def __init__(self):
         print(f"[{type(self).__name__}] Generating {b} random bases for the qubits...")
         self.bases = randint(2, size=b)  # 0: Computational basis, 1: Hadamard basis
-        self.received_key = np.zeros(b, dtype=int)  # Key received from Alice
-        self.matching_key = np.zeros(b, dtype=int)  # Key bits of matching bases
+        self.received_key = zeros(b, dtype=int)  # Key received from Alice
+        self.matching_key = zeros(b, dtype=int)  # Key bits of matching bases
         self.matching_bases = []  # Indices of matching bases
 
     def get_bases(self):
@@ -113,7 +113,7 @@ class Bob:
 
             exit(1)
         else:
-            self.matching_bases = np.array(self.matching_bases)
+            self.matching_bases = array(self.matching_bases)
 
             print(
                 f"\nMatching bases count: \t\t{matching_bases_count} ≥ {2 * n}"
@@ -127,7 +127,7 @@ class Eve:
         print(f"[{type(self).__name__}] Generating random {b} bases for the qubits...")
 
         self.bases = randint(2, size=b)  # 0: Computational basis, 1: Hadamard basis
-        self.intercepted_key = np.zeros(b, dtype=int)
+        self.intercepted_key = zeros(b, dtype=int)
 
     def get_bases(self):
         return self.bases
@@ -172,10 +172,10 @@ def print_parameters():
     print(f"  * Extended key length (b): {b} bits")
 
 
-def generate_key(with_eve=False):
+def init_agents(with_eve=False):
     alice = Alice()
-    eve = Eve() if with_eve else None
     bob = Bob()
+    eve = Eve() if with_eve else None
 
     alice.print_key()
     alice.print_bases()
@@ -232,7 +232,7 @@ def check_intrusion(key_indices, check_indices):
 
     mismatched_indices.sort()
 
-    return intrusion_detected, np.array(mismatched_indices), key
+    return intrusion_detected, array(mismatched_indices), key
 
 
 def check_false_negative(mismatched_indices, key_indices, discarded_indices):
@@ -254,7 +254,7 @@ def check_false_negative(mismatched_indices, key_indices, discarded_indices):
         ):
             mismatched_indices.append(discarded_indices[i])
 
-    mismatched_indices = np.array(mismatched_indices)
+    mismatched_indices = array(mismatched_indices)
 
     if len(mismatched_indices) > 0:
         print(
@@ -266,7 +266,7 @@ def main(with_eve=False):
     print_parameters()
 
     global alice, bob, eve
-    alice, bob, eve = generate_key(with_eve)
+    alice, bob, eve = init_agents(with_eve)
 
     print("\nKey received by Bob: \t\t[", end="")
 
