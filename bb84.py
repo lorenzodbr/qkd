@@ -2,21 +2,24 @@ import numpy as np
 from numpy import setdiff1d, zeros, array
 from numpy.random import randint, choice, shuffle
 from qiskit import QuantumCircuit, transpile
-from qiskit_aer import QasmSimulator
+from qiskit_aer import AerSimulator
 
 alice = bob = eve = None  # Instances of the three agents
-backend = QasmSimulator()  # Backend instance for simulation
+backend = AerSimulator()  # Backend instance for simulation
 qubit = None  # Qubit to be sent
 n = 6  # Final key length
 delta = 1  # Redundancy factor
 b = (4 + delta) * n  # Key length with redundancy
 
+COMPUTATIONAL = 0
+HADAMARD = 1
+MISMATCH = -1
 
 class Alice:
     def __init__(self):
         print(f"\n[{type(self).__name__}] Generating {b} random bits for the key...")
         print(f"[{type(self).__name__}] Generating {b} random bases for the qubits...")
-        self.bases = randint(2, size=b)  # 0: Computational basis, 1: Hadamard basis
+        self.bases = choice([COMPUTATIONAL, HADAMARD], b)
         self.key = randint(2, size=b)  # Random bits for the key
 
     def get_key(self):
@@ -41,7 +44,7 @@ class Alice:
 
         if bit == 1:
             qubit.x(0)  # Apply NOT gate if bit is 1
-        if basis == 1:
+        if basis == HADAMARD:
             qubit.h(0)  # Apply Hadamard gate if basis is 1 (Hadamard basis)
 
     def send(self, i):
@@ -51,7 +54,7 @@ class Alice:
 class Bob:
     def __init__(self):
         print(f"[{type(self).__name__}] Generating {b} random bases for the qubits...")
-        self.bases = randint(2, size=b)  # 0: Computational basis, 1: Hadamard basis
+        self.bases = choice([COMPUTATIONAL, HADAMARD], b)
         self.received_key = zeros(b, dtype=int)  # Key received from Alice
         self.matching_key = zeros(b, dtype=int)  # Key bits of matching bases
         self.matching_bases = []  # Indices of matching bases
@@ -78,7 +81,7 @@ class Bob:
     def measure(self, basis):
         global qubit
 
-        if basis == 1:
+        if basis == HADAMARD:
             qubit.h(0)  # Change basis if necessary
 
         qubit.measure(0, 0)  # Measurement device
@@ -101,7 +104,7 @@ class Bob:
                 self.matching_bases.append(i)
                 self.matching_key[i] = self.received_key[i]
             else:
-                self.matching_key[i] = -1  # Value to indicate mismatch
+                self.matching_key[i] = MISMATCH  # Value to indicate mismatch
 
         matching_bases_count = len(self.matching_bases)
 
@@ -112,21 +115,21 @@ class Bob:
             )
 
             exit(1)
-        else:
-            self.matching_bases = array(self.matching_bases)
+            
+        self.matching_bases = array(self.matching_bases)
 
-            print(
-                f"\nMatching bases count: \t\t{matching_bases_count} ≥ {2 * n}"
-                + f"\x1b[1D]\n\nMatching bases indices: \t{self.matching_bases}"
-                + f"\n\nBits kept by Bob: \t\t[{' '.join([str(b) if b > -1 else '-' for b in self.matching_key])}]"
-            )
+        print(
+            f"\n\nMatching bases count: \t\t{matching_bases_count} ≥ {2 * n}"
+            + f"\nMatching bases indices: \t{self.matching_bases}"
+            + f"\n\nBits kept by Bob: \t\t[{' '.join([str(b) if b != MISMATCH else '-' for b in self.matching_key])}]"
+        )
 
 
 class Eve:
     def __init__(self):
         print(f"[{type(self).__name__}] Generating random {b} bases for the qubits...")
 
-        self.bases = randint(2, size=b)  # 0: Computational basis, 1: Hadamard basis
+        self.bases = choice([COMPUTATIONAL, HADAMARD], b)
         self.intercepted_key = zeros(b, dtype=int)
 
     def get_bases(self):
@@ -296,6 +299,7 @@ def main(with_eve=False):
     )
 
     if not intrusion_detected:
+        print("No mismatched bits found within check indices. Key exchange successful!")
         print(f"Key ({len(key)} bits):\t\t\t{key}")
 
         check_false_negative(mismatched_indices, key_indices, discarded_indices)
@@ -305,4 +309,4 @@ def main(with_eve=False):
 
 if __name__ == "__main__":
     # Set `with_eve` to `True` to include Eve in the simulation
-    main(with_eve=True)
+    main(with_eve=False)

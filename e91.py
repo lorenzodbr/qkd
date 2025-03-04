@@ -7,7 +7,7 @@ from qiskit_aer import AerSimulator
 alice = bob = eve = None  # Instances of the three agents
 backend = AerSimulator()  # Backend instance for simulation
 qubits = None  # Qubit to be sent
-n = 16  # Final key length
+n = 24  # Final key length
 delta = 2  # Redundancy factor
 b = (4 + delta) * n  # Number of qubits to be sent
 
@@ -175,7 +175,7 @@ def init_agents(with_eve=False):
     return alice, bob, charlie, eve
 
 
-def measure(i):
+def simulate(i):
     transpiled = transpile(qubits, backend)
     c = backend.run(transpiled, shots=8192).result().get_counts()
 
@@ -194,25 +194,20 @@ def calc_CHSH():
     S = -1
 
     for i in range(0, len(counts), 4):
-        zz, zx, xz, xx = counts[i : i + 4]
+        aa, ab, ba, bb = counts[i : i + 4]
 
-        num_shots = sum(xx.values())
+        num_shots = sum(bb.values())
 
         if num_shots == 0:
             continue
 
         chsh = sum(
             (-1) ** (int(key[0]) + int(key[1]))
-            * (zz.get(key, 0) - zx.get(key, 0) + xz.get(key, 0) + xx.get(key, 0))
-            for key in set(zz)
-            | set(zx)
-            | set(xz)
-            | set(xx)
+            * (aa.get(key, 0) - ab.get(key, 0) + ba.get(key, 0) + bb.get(key, 0))
+            for key in set(aa) | set(ab) | set(ba) | set(bb)
         )
 
-        candidate = abs(chsh / num_shots)
-
-        S = max(S, candidate)
+        S = max(S, abs(chsh / num_shots))
 
     print(f"\nCHSH value (S):\t\t {S:.3f}")
     return S
@@ -253,7 +248,7 @@ def main(with_eve=False):
         if with_eve:
             eve.intercept(i)
 
-        measure(i)
+        simulate(i)
 
     bob.print_received_bits()
     if with_eve:
@@ -269,4 +264,4 @@ def main(with_eve=False):
 
 if __name__ == "__main__":
     # Set `with_eve` to `True` to include Eve in the simulation
-    main(with_eve=True)
+    main(with_eve=False)
