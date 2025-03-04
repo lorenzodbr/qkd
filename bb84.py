@@ -1,5 +1,5 @@
 import numpy as np
-from numpy import setdiff1d, zeros, array
+from numpy import zeros, array
 from numpy.random import randint, choice, shuffle
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
@@ -14,6 +14,7 @@ b = (4 + delta) * n  # Key length with redundancy
 COMPUTATIONAL = 0
 HADAMARD = 1
 MISMATCH = -1
+SHOTS = 512
 
 class Alice:
     def __init__(self):
@@ -33,7 +34,7 @@ class Alice:
 
     def print_bases(self):
         print(
-            "Alice's bases:\t\t\t["
+            f"{type(self).__name__}'s bases:\t\t\t["
             + " ".join(["C" if b == 0 else "H" for b in self.bases])
             + "]"
         )
@@ -64,7 +65,7 @@ class Bob:
 
     def print_bases(self):
         print(
-            "Bob's bases:\t\t\t["
+            f"{type(self).__name__}'s bases:\t\t\t["
             + " ".join(["C" if b == 0 else "H" for b in self.bases])
             + "]"
         )
@@ -88,7 +89,7 @@ class Bob:
 
         # Simulation of the qubit measurement
         transpiled = transpile(qubit, backend)
-        counts = backend.run(transpiled).result().get_counts()
+        counts = backend.run(transpiled, shots=SHOTS).result().get_counts()
         measured_bit = max(counts, key=counts.get)
 
         print(measured_bit, end=" ", flush=True)
@@ -137,7 +138,7 @@ class Eve:
 
     def print_bases(self):
         print(
-            "Eve's bases:\t\t\t["
+            f"{type(self).__name__}'s bases:\t\t\t["
             + " ".join(["C" if b == 0 else "H" for b in self.bases])
             + "]"
         )
@@ -158,7 +159,7 @@ class Eve:
 
         # Interception of the qubit and measurement
         transpiled = transpile(qubit, backend)
-        counts = backend.run(transpiled).result().get_counts()
+        counts = backend.run(transpiled, shots=SHOTS).result().get_counts()
         measured_bit = max(counts, key=counts.get)
 
         return measured_bit
@@ -193,9 +194,10 @@ def init_agents(with_eve=False):
 
 def choose_and_split_indices():
     # 2 * n random indices are selected among those of the matching bases
-    work_indices = choice(bob.get_matching_bases(), 2 * n, replace=False)
-    discarded_indices = setdiff1d(bob.get_matching_bases(), work_indices)
+    work_indices = bob.get_matching_bases()
     shuffle(work_indices)
+    discarded_indices = work_indices[2 * n:]
+    work_indices = work_indices[:2 * n]
 
     if len(discarded_indices) > 0:
         print(f"\nIndices of discarded bits: \t{discarded_indices}")
@@ -238,7 +240,7 @@ def check_intrusion(key_indices, check_indices):
     return intrusion_detected, array(mismatched_indices), key
 
 
-def check_false_negative(mismatched_indices, key_indices, discarded_indices):
+def check_false_negative(key_indices, discarded_indices):
     # Verify if it was a false negative: since the choice of the check bits is random,
     # this could have led to not selecting bits that could have revealed the intrusion
 
@@ -302,7 +304,7 @@ def main(with_eve=False):
         print("No mismatched bits found within check indices. Key exchange successful!")
         print(f"Key ({len(key)} bits):\t\t\t{key}")
 
-        check_false_negative(mismatched_indices, key_indices, discarded_indices)
+        check_false_negative(key_indices, discarded_indices)
     else:
         print(f"Intrusion detected! Bits at indices {mismatched_indices} do not match.")
 

@@ -1,3 +1,4 @@
+import time
 import numpy as np
 from numpy import pi, zeros
 from numpy.random import randint
@@ -7,8 +8,8 @@ from qiskit_aer import AerSimulator
 alice = bob = eve = None  # Instances of the three agents
 backend = AerSimulator()  # Backend instance for simulation
 qubits = None  # Qubit to be sent
-n = 24  # Final key length
-delta = 2  # Redundancy factor
+n = 8  # Final key length
+delta = 0  # Redundancy factor
 b = (4 + delta) * n  # Number of qubits to be sent
 
 counts = []
@@ -16,6 +17,8 @@ counts = []
 ALICE = 0
 BOB = 1
 EVE = 2
+THRESHOLD = 0.1
+SHOTS = 1
 
 
 class Alice:
@@ -33,7 +36,7 @@ class Alice:
         return self.key
 
     def print_key(self):
-        print(f"\nAlice's key:\t\t {alice.get_key()}")
+        print(f"\n{type(self).__name__}'s key:\t\t {alice.get_key()}")
 
     def append_key(self, key):
         self.key += str(key)
@@ -42,7 +45,7 @@ class Alice:
         return self.received_bits
 
     def print_received_bits(self):
-        print("\nAlice's received bits:\t [", end="")
+        print(f"\n{type(self).__name__}'s received bits:\t [", end="")
 
     def get_received_bit(self, i):
         return self.received_bits[i]
@@ -54,7 +57,7 @@ class Alice:
         return self.bases
 
     def print_bases(self):
-        print(f"\nAlice's bases:\t\t {self.bases}")
+        print(f"\n{type(self).__name__}'s bases:\t\t {self.bases}")
 
     def receive(self, i):
         global qubits
@@ -76,7 +79,7 @@ class Bob:
         return self.key
 
     def print_key(self):
-        print(f"Bob's key:\t\t {bob.get_key()}")
+        print(f"{type(self).__name__}'s key:\t\t {bob.get_key()}")
 
     def append_key(self, key):
         self.key += str(key)
@@ -85,7 +88,9 @@ class Bob:
         return self.received_bits
 
     def print_received_bits(self):
-        print(f"\x1b[1D]\nBob's received bits:\t {bob.get_received_bits()}")
+        print(
+            f"\x1b[1D]\n{type(self).__name__}'s received bits:\t {bob.get_received_bits()}"
+        )
 
     def get_received_bit(self, i):
         return self.received_bits[i]
@@ -97,7 +102,7 @@ class Bob:
         return self.bases
 
     def print_bases(self):
-        print(f"Bob's bases:\t\t {self.bases}")
+        print(f"{type(self).__name__}'s bases:\t\t {self.bases}")
 
     def receive(self, i):
         qubits.ry(self.angles[self.bases[i]], BOB)
@@ -113,11 +118,10 @@ class Charlie:
         global qubits
 
         qubits_count = 3 if self.with_eve else 2
-        qr = QuantumRegister(qubits_count, "qr")  # alice(q[0]), bob(q[1]), eve(q[2])
+        qr = QuantumRegister(qubits_count, "qr")
         cr = ClassicalRegister(qubits_count, "cr")
         qubits = QuantumCircuit(qr, cr)
 
-        # Bell state on qubits
         qubits.h(qr[ALICE])
         qubits.cx(qr[ALICE], qr[BOB])
         if self.with_eve:
@@ -125,19 +129,31 @@ class Charlie:
 
 
 class Eve:
-    possible_angles = [pi / 4]
+    possible_angles = [0, pi / 4, pi / 2]
 
     def __init__(self):
         print(f"[{type(self).__name__}] Generating {b} random bases for the qubits...")
 
         self.bases = randint(len(self.possible_angles), size=b)
         self.intercepted_bits = zeros(b, dtype=int)
+        self.key = ""
+
+    def get_key(self):
+        return self.key
+
+    def print_key(self):
+        print(f"{type(self).__name__}'s key:\t\t {eve.get_key()}")
+
+    def append_key(self, key):
+        self.key += str(key)
 
     def get_intercepted_bits(self):
         return self.intercepted_bits
 
     def print_intercepted_bits(self):
-        print(f"Eve's intercepted bits:\t {eve.get_intercepted_bits()}")
+        print(
+            f"{type(self).__name__}'s intercepted bits:\t {eve.get_intercepted_bits()}"
+        )
 
     def set_intercepted_bit(self, i, bit):
         self.intercepted_bits[i] = bit
@@ -146,7 +162,7 @@ class Eve:
         return self.bases
 
     def print_bases(self):
-        print(f"Eve's bases:\t\t {self.bases}")
+        print(f"{type(self).__name__}'s bases:\t\t {self.bases}")
 
     def intercept(self, i):
         qubits.ry(self.possible_angles[self.bases[i]], EVE)
@@ -177,7 +193,7 @@ def init_agents(with_eve=False):
 
 def simulate(i):
     transpiled = transpile(qubits, backend)
-    c = backend.run(transpiled, shots=8192).result().get_counts()
+    c = backend.run(transpiled, shots=SHOTS).result().get_counts()
 
     counts.append(c)
 
@@ -191,45 +207,59 @@ def simulate(i):
 
 
 def calc_CHSH():
-    S = -1
+    values = {
+        (a, b): 0 for a in range(len(Alice.angles)) for b in range(len(Bob.angles))
+    }
+    counts = {
+        (a, b): 0 for a in range(len(Alice.angles)) for b in range(len(Bob.angles))
+    }
 
-    for i in range(0, len(counts), 4):
-        aa, ab, ba, bb = counts[i : i + 4]
+    for i in range(b):
+        alice_basis = alice.get_bases()[i]
+        bob_basis = bob.get_bases()[i]
 
-        num_shots = sum(bb.values())
+        alice_measure = -1 if alice.get_received_bit(i) == 0 else 1
+        bob_measure = -1 if bob.get_received_bit(i) == 0 else 1
 
-        if num_shots == 0:
-            continue
+        values[(alice_basis, bob_basis)] += alice_measure * bob_measure
+        counts[(alice_basis, bob_basis)] += 1
 
-        chsh = sum(
-            (-1) ** (int(key[0]) + int(key[1]))
-            * (aa.get(key, 0) - ab.get(key, 0) + ba.get(key, 0) + bb.get(key, 0))
-            for key in set(aa) | set(ab) | set(ba) | set(bb)
-        )
+    for pair in values:
+        if counts[pair] > 0:
+            values[pair] /= counts[pair]
+        else:
+            values[pair] = 0
 
-        S = max(S, abs(chsh / num_shots))
+    S = abs(values[(0, 0)] - values[(0, 2)] + values[(2, 0)] + values[(2, 2)])
 
     print(f"\nCHSH value (S):\t\t {S:.3f}")
+
     return S
 
 
-def calc_key():
+def calc_key(with_eve=False):
     i = j = 0
 
     while i < b and j < n:
         if alice.angles[alice.get_bases()[i]] == bob.angles[bob.get_bases()[i]]:
             alice.append_key(alice.get_received_bit(i))
             bob.append_key(bob.get_received_bit(i))
+            if with_eve:
+                eve.append_key(eve.get_intercepted_bits()[i])
             j += 1
 
         i += 1
 
     if j < n:
-        print(f"\nError: Insufficient number of matching bases ({j} < {n})")
+        print(f"\nError: Insufficient number of matching bases ({j} < {n}). Will retry in 2 seconds...")
+        time.sleep(2)
+        main(with_eve=False)
         exit(1)
 
     alice.print_key()
     bob.print_key()
+    if with_eve:
+        eve.print_key()
 
 
 def main(with_eve=False):
@@ -254,12 +284,14 @@ def main(with_eve=False):
     if with_eve:
         eve.print_intercepted_bits()
 
-    calc_key()
+    calc_key(with_eve)
 
     S = calc_CHSH()
 
-    if S - 2 < 0.1:
-        print("\nIntrusion detected! Bell's inequality not violated.")
+    if S - 2 < THRESHOLD:
+        print(
+            "\nIntrusion detected! Bell's inequality is not violated, hence key is compromised."
+        )
 
 
 if __name__ == "__main__":
