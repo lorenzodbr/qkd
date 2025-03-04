@@ -19,6 +19,7 @@ BOB = 1
 EVE = 2
 THRESHOLD = 0.1
 SHOTS = 1
+WITH_EVE = False
 
 
 class Alice:
@@ -110,21 +111,20 @@ class Bob:
 
 
 class Charlie:
-    def __init__(self, with_eve=False):
+    def __init__(self):
         print(f"[{type(self).__name__}] Preparing qubit for transmission...")
-        self.with_eve = with_eve
 
     def prepare_qubit(self):
         global qubits
 
-        qubits_count = 3 if self.with_eve else 2
+        qubits_count = 3 if WITH_EVE else 2
         qr = QuantumRegister(qubits_count, "qr")
         cr = ClassicalRegister(qubits_count, "cr")
         qubits = QuantumCircuit(qr, cr)
 
         qubits.h(qr[ALICE])
         qubits.cx(qr[ALICE], qr[BOB])
-        if self.with_eve:
+        if WITH_EVE:
             qubits.cx(qr[BOB], qr[EVE])
 
 
@@ -177,14 +177,14 @@ def print_parameters():
     print(f"  * Number of qubits to be sent (b): {b}")
 
 
-def init_agents(with_eve=False):
+def init_agents():
     alice = Alice()
     bob = Bob()
-    charlie = Charlie(with_eve)
-    eve = Eve() if with_eve else None
+    charlie = Charlie()
+    eve = Eve() if WITH_EVE else None
 
     alice.print_bases()
-    if with_eve:
+    if WITH_EVE:
         eve.print_bases()
     bob.print_bases()
 
@@ -237,36 +237,40 @@ def calc_CHSH():
     return S
 
 
-def calc_key(with_eve=False):
+def calc_key():
     i = j = 0
 
     while i < b and j < n:
         if alice.angles[alice.get_bases()[i]] == bob.angles[bob.get_bases()[i]]:
             alice.append_key(alice.get_received_bit(i))
             bob.append_key(bob.get_received_bit(i))
-            if with_eve:
+            if WITH_EVE:
                 eve.append_key(eve.get_intercepted_bits()[i])
             j += 1
 
         i += 1
 
     if j < n:
-        print(f"\nError: Insufficient number of matching bases ({j} < {n}). Will retry in 2 seconds...")
+        print(
+            f"\nError: Insufficient number of matching bases ({j} < {n}). Will retry in 2 seconds..."
+        )
         time.sleep(2)
-        main(with_eve=False)
+        print("\033[H\033[J", end="")
+
+        main()
         exit(1)
 
     alice.print_key()
     bob.print_key()
-    if with_eve:
+    if WITH_EVE:
         eve.print_key()
 
 
-def main(with_eve=False):
+def main():
     print_parameters()
 
     global alice, bob, eve
-    alice, bob, charlie, eve = init_agents(with_eve)
+    alice, bob, charlie, eve = init_agents()
 
     alice.print_received_bits()
 
@@ -275,16 +279,16 @@ def main(with_eve=False):
 
         alice.receive(i)
         bob.receive(i)
-        if with_eve:
+        if WITH_EVE:
             eve.intercept(i)
 
         simulate(i)
 
     bob.print_received_bits()
-    if with_eve:
+    if WITH_EVE:
         eve.print_intercepted_bits()
 
-    calc_key(with_eve)
+    calc_key()
 
     S = calc_CHSH()
 
@@ -295,5 +299,4 @@ def main(with_eve=False):
 
 
 if __name__ == "__main__":
-    # Set `with_eve` to `True` to include Eve in the simulation
-    main(with_eve=False)
+    main()

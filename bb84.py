@@ -1,3 +1,4 @@
+import time
 import numpy as np
 from numpy import zeros, array
 from numpy.random import randint, choice, shuffle
@@ -15,6 +16,8 @@ COMPUTATIONAL = 0
 HADAMARD = 1
 MISMATCH = -1
 SHOTS = 512
+WITH_EVE = False
+
 
 class Alice:
     def __init__(self):
@@ -112,11 +115,14 @@ class Bob:
         if matching_bases_count < 2 * n:
             print(
                 f"\n\nMatching bases count ({matching_bases_count}) is less than {2 * n}."
-                + " Cannot proceed with the key exchange."
+                + " Will retry in 2 seconds..."
             )
+            time.sleep(2)
+            print("\033[H\033[J", end="")
 
+            main()
             exit(1)
-            
+
         self.matching_bases = array(self.matching_bases)
 
         print(
@@ -176,15 +182,15 @@ def print_parameters():
     print(f"  * Extended key length (b): {b} bits")
 
 
-def init_agents(with_eve=False):
+def init_agents():
     alice = Alice()
     bob = Bob()
-    eve = Eve() if with_eve else None
+    eve = Eve() if WITH_EVE else None
 
     alice.print_key()
     alice.print_bases()
 
-    if with_eve:
+    if WITH_EVE:
         eve.print_bases()
 
     bob.print_bases()
@@ -196,8 +202,8 @@ def choose_and_split_indices():
     # 2 * n random indices are selected among those of the matching bases
     work_indices = bob.get_matching_bases()
     shuffle(work_indices)
-    discarded_indices = work_indices[2 * n:]
-    work_indices = work_indices[:2 * n]
+    discarded_indices = work_indices[2 * n :]
+    work_indices = work_indices[: 2 * n]
 
     if len(discarded_indices) > 0:
         print(f"\nIndices of discarded bits: \t{discarded_indices}")
@@ -267,11 +273,11 @@ def check_false_negative(key_indices, discarded_indices):
         )
 
 
-def main(with_eve=False):
+def main():
     print_parameters()
 
     global alice, bob, eve
-    alice, bob, eve = init_agents(with_eve)
+    alice, bob, eve = init_agents()
 
     print("\nKey received by Bob: \t\t[", end="")
 
@@ -281,13 +287,13 @@ def main(with_eve=False):
         alice.send(i)
 
         # If Eve is present, she intercepts the qubit
-        if with_eve:
+        if WITH_EVE:
             eve.intercept(i)
 
         # Bob measures the qubit in the chosen basis
         bob.receive(i)
 
-    if with_eve:
+    if WITH_EVE:
         eve.print_intercepted_key()
 
     # Bases comparison phase
@@ -310,5 +316,4 @@ def main(with_eve=False):
 
 
 if __name__ == "__main__":
-    # Set `with_eve` to `True` to include Eve in the simulation
-    main(with_eve=False)
+    main()
