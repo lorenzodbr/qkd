@@ -5,21 +5,21 @@ from numpy.random import randint
 from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister, transpile
 from qiskit_aer import AerSimulator
 
-alice = bob = eve = None  # Instances of the three agents
+alice = bob = charlie = eve = None  # Instances of the three agents
 backend = AerSimulator()  # Backend instance for simulation
-qubits = None  # Qubit to be sent
+qubits = None  # Qubits to be sent
 n = 8  # Final key length
 delta = 0  # Redundancy factor
 b = (4 + delta) * n  # Number of qubits to be sent
 
-counts = []
-
-ALICE = 0
-BOB = 1
-EVE = 2
-THRESHOLD = 0.1
-SHOTS = 1
-WITH_EVE = False
+ALICE = 0  # Qubit index for Alice
+BOB = 1  # Qubit index for Bob
+EVE = 2  # Qubit index for Eve
+THRESHOLD = 0.1  # Threshold for Bell's inequality
+CHSH_LIMIT = 2  # Maximum value of violation of Bell's inequality
+SHOTS = 1  # Number of shots for simulation
+WITH_EVE = False  # Whether to include Eve in the simulation
+TIMEOUT = 2  # Timeout for retrying in case of insufficient matching bases
 
 
 class Alice:
@@ -155,6 +155,9 @@ class Eve:
             f"{type(self).__name__}'s intercepted bits:\t {eve.get_intercepted_bits()}"
         )
 
+    def get_intercepted_bit(self, i):
+        return self.intercepted_bits[i]
+
     def set_intercepted_bit(self, i, bit):
         self.intercepted_bits[i] = bit
 
@@ -178,6 +181,8 @@ def print_parameters():
 
 
 def init_agents():
+    global alice, bob, charlie, eve
+
     alice = Alice()
     bob = Bob()
     charlie = Charlie()
@@ -188,19 +193,15 @@ def init_agents():
         eve.print_bases()
     bob.print_bases()
 
-    return alice, bob, charlie, eve
-
 
 def simulate(i):
     transpiled = transpile(qubits, backend)
-    c = backend.run(transpiled, shots=SHOTS).result().get_counts()
+    counts = backend.run(transpiled, shots=SHOTS).result().get_counts()
 
-    counts.append(c)
-
-    measured_states = max(c, key=c.get)[::-1]
+    measured_states = max(counts, key=counts.get)[::-1]
     alice.set_received_bit(i, int(measured_states[ALICE]))
     bob.set_received_bit(i, int(measured_states[BOB]))
-    if eve:
+    if WITH_EVE:
         eve.set_intercepted_bit(i, int(measured_states[EVE]))
 
     print(measured_states[ALICE], end=" ", flush=True)
@@ -246,15 +247,16 @@ def calc_key():
             bob.append_key(bob.get_received_bit(i))
             if WITH_EVE:
                 eve.append_key(eve.get_intercepted_bits()[i])
+
             j += 1
 
         i += 1
 
     if j < n:
         print(
-            f"\nError: Insufficient number of matching bases ({j} < {n}). Will retry in 2 seconds..."
+            f"\nError: Insufficient number of matching bases ({j} < {n}). Will retry in {TIMEOUT} seconds..."
         )
-        time.sleep(2)
+        time.sleep(TIMEOUT)
         print("\033[H\033[J", end="")
 
         main()
@@ -269,8 +271,7 @@ def calc_key():
 def main():
     print_parameters()
 
-    global alice, bob, eve
-    alice, bob, charlie, eve = init_agents()
+    init_agents()
 
     alice.print_received_bits()
 
@@ -292,7 +293,7 @@ def main():
 
     S = calc_CHSH()
 
-    if S - 2 < THRESHOLD:
+    if S - CHSH_LIMIT < THRESHOLD:
         print(
             "\nIntrusion detected! Bell's inequality is not violated, hence key is compromised."
         )

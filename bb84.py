@@ -12,11 +12,12 @@ n = 6  # Final key length
 delta = 1  # Redundancy factor
 b = (4 + delta) * n  # Key length with redundancy
 
-COMPUTATIONAL = 0
-HADAMARD = 1
-MISMATCH = -1
-SHOTS = 512
-WITH_EVE = False
+COMPUTATIONAL = 0  # Computational basis index
+HADAMARD = 1  # Hadamard basis index
+MISMATCH = -1  # Value to indicate mismatch in bases
+SHOTS = 512  # Number of shots for simulation
+WITH_EVE = True  # Whether to include Eve in the simulation
+TIMEOUT = 2  # Timeout for retrying in case of insufficient matching bases
 
 
 class Alice:
@@ -30,7 +31,7 @@ class Alice:
         return self.key
 
     def print_key(self):
-        print(f"\nKey:\t\t\t\t{self.key}\n")
+        print(f"\n\nKey:\t\t\t\t{self.key}\n")
 
     def get_bases(self):
         return self.bases
@@ -114,10 +115,10 @@ class Bob:
 
         if matching_bases_count < 2 * n:
             print(
-                f"\n\nMatching bases count ({matching_bases_count}) is less than {2 * n}."
-                + " Will retry in 2 seconds..."
+                f"\x1b[1D]\n\nMatching bases count ({matching_bases_count}) is less than {2 * n}."
+                + f" Will retry in {TIMEOUT} seconds..."
             )
-            time.sleep(2)
+            time.sleep(TIMEOUT)
             print("\033[H\033[J", end="")
 
             main()
@@ -126,9 +127,9 @@ class Bob:
         self.matching_bases = array(self.matching_bases)
 
         print(
-            f"\n\nMatching bases count: \t\t{matching_bases_count} ≥ {2 * n}"
+            f"\x1b[1D]\n\nMatching bases count: \t\t{matching_bases_count} ≥ {2 * n}"
             + f"\nMatching bases indices: \t{self.matching_bases}"
-            + f"\n\nBits kept by Bob: \t\t[{' '.join([str(b) if b != MISMATCH else '-' for b in self.matching_key])}]"
+            + f"\n\nBits kept by {type(self).__name__}: \t\t[{' '.join([str(b) if b != MISMATCH else '-' for b in self.matching_key])}]"
         )
 
 
@@ -153,7 +154,10 @@ class Eve:
         return self.intercepted_key
 
     def print_intercepted_key(self):
-        print(f"\x1b[1D]\nKey intercepted by Eve: \t{self.intercepted_key}", end="")
+        print(
+            f"\x1b[1D]\nKey intercepted by {type(self).__name__}: \t{self.intercepted_key}",
+            end="",
+        )
 
     def measure(self, basis):
         global qubit
@@ -183,6 +187,8 @@ def print_parameters():
 
 
 def init_agents():
+    global alice, bob, eve
+
     alice = Alice()
     bob = Bob()
     eve = Eve() if WITH_EVE else None
@@ -276,8 +282,7 @@ def check_false_negative(key_indices, discarded_indices):
 def main():
     print_parameters()
 
-    global alice, bob, eve
-    alice, bob, eve = init_agents()
+    init_agents()
 
     print("\nKey received by Bob: \t\t[", end="")
 
