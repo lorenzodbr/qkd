@@ -8,15 +8,15 @@ from qiskit_aer import AerSimulator
 alice = bob = eve = None  # Instances of the three agents
 backend = AerSimulator()  # Backend instance for simulation
 qubit = None  # Qubit to be sent
-n = 6  # Final key length
+n = 8  # Final key length
 delta = 1  # Redundancy factor
 b = (4 + delta) * n  # Key length with redundancy
 
 COMPUTATIONAL = 0  # Computational basis index
 HADAMARD = 1  # Hadamard basis index
 MISMATCH = -1  # Value to indicate mismatch in bases
-SHOTS = 512  # Number of shots for simulation
-WITH_EVE = True  # Whether to include Eve in the simulation
+SHOTS = 1  # Number of shots for simulation
+WITH_EVE = False  # Whether to include Eve in the simulation
 TIMEOUT = 2  # Timeout for retrying in case of insufficient matching bases
 
 
@@ -31,7 +31,7 @@ class Alice:
         return self.key
 
     def print_key(self):
-        print(f"\n\nKey:\t\t\t\t{self.key}\n")
+        print(f"\nKey:\t\t\t\t{self.key}\n")
 
     def get_bases(self):
         return self.bases
@@ -84,8 +84,6 @@ class Bob:
         return self.matching_bases
 
     def measure(self, basis):
-        global qubit
-
         if basis == HADAMARD:
             qubit.h(0)  # Change basis if necessary
 
@@ -160,8 +158,6 @@ class Eve:
         )
 
     def measure(self, basis):
-        global qubit
-
         if basis == 1:
             qubit.h(0)  # Basis change if necessary
 
@@ -200,8 +196,6 @@ def init_agents():
         eve.print_bases()
 
     bob.print_bases()
-
-    return alice, bob, eve
 
 
 def choose_and_split_indices():

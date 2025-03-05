@@ -61,8 +61,6 @@ class Alice:
         print(f"\n{type(self).__name__}'s bases:\t\t {self.bases}")
 
     def receive(self, i):
-        global qubits
-
         qubits.ry(self.angles[self.bases[i]], ALICE)
         qubits.measure(ALICE, ALICE)
 
