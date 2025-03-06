@@ -24,7 +24,7 @@ class Alice:
     def __init__(self):
         print(f"\n[{type(self).__name__}] Generating {b} random bits for the key...")
         print(f"[{type(self).__name__}] Generating {b} random bases for the qubits...")
-        self.bases = choice([COMPUTATIONAL, HADAMARD], b)
+        self.bases = choice([COMPUTATIONAL, HADAMARD], b)  # Random bases for the qubits
         self.key = randint(2, size=b)  # Random bits for the key
 
     def get_key(self):
@@ -59,7 +59,7 @@ class Alice:
 class Bob:
     def __init__(self):
         print(f"[{type(self).__name__}] Generating {b} random bases for the qubits...")
-        self.bases = choice([COMPUTATIONAL, HADAMARD], b)
+        self.bases = choice([COMPUTATIONAL, HADAMARD], b)  # Random bases for the qubits
         self.received_key = zeros(b, dtype=int)  # Key received from Alice
         self.matching_key = zeros(b, dtype=int)  # Key bits of matching bases
         self.matching_bases = []  # Indices of matching bases
@@ -104,14 +104,14 @@ class Bob:
     def check_bases_match(self):
         for i in range(b):
             if alice.get_bases()[i] == self.bases[i]:
-                self.matching_bases.append(i)
+                self.matching_bases.append(i)  # Keep track of matching bases
                 self.matching_key[i] = self.received_key[i]
             else:
-                self.matching_key[i] = MISMATCH  # Value to indicate mismatch
+                self.matching_key[i] = MISMATCH
 
         matching_bases_count = len(self.matching_bases)
 
-        if matching_bases_count < 2 * n:
+        if matching_bases_count < 2 * n:  # Check if there are enough matching bases
             print(
                 f"\x1b[1D]\n\nMatching bases count ({matching_bases_count}) is less than {2 * n}."
                 + f" Will retry in {TIMEOUT} seconds..."
@@ -135,7 +135,7 @@ class Eve:
     def __init__(self):
         print(f"[{type(self).__name__}] Generating random {b} bases for the qubits...")
 
-        self.bases = choice([COMPUTATIONAL, HADAMARD], b)
+        self.bases = choice([COMPUTATIONAL, HADAMARD], b)  # Random bases for the qubits
         self.intercepted_key = zeros(b, dtype=int)
 
     def get_bases(self):

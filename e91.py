@@ -9,7 +9,7 @@ alice = bob = charlie = eve = None  # Instances of the three agents
 backend = AerSimulator()  # Backend instance for simulation
 qubits = None  # Qubits to be sent
 n = 8  # Final key length
-delta = 0  # Redundancy factor
+delta = 1  # Redundancy factor
 b = (4 + delta) * n  # Number of qubits to be sent
 
 ALICE = 0  # Qubit index for Alice
@@ -23,13 +23,13 @@ TIMEOUT = 2  # Timeout for retrying in case of insufficient matching bases
 
 
 class Alice:
-    angles = [0, pi / 4, pi / 2]
+    angles = [0, pi / 4, pi / 2]  # Possible angles for rotation
 
     def __init__(self):
         print(
             f"\n[{type(self).__name__}] Generating {b} random bases for the qubits..."
         )
-        self.bases = randint(len(self.angles), size=b)
+        self.bases = randint(len(self.angles), size=b)  # Random bases for the qubits
         self.received_bits = zeros(b, dtype=int)
         self.key = ""
 
@@ -48,9 +48,6 @@ class Alice:
     def print_received_bits(self):
         print(f"\n{type(self).__name__}'s received bits:\t [", end="")
 
-    def get_received_bit(self, i):
-        return self.received_bits[i]
-
     def set_received_bit(self, i, bit):
         self.received_bits[i] = bit
 
@@ -61,16 +58,18 @@ class Alice:
         print(f"\n{type(self).__name__}'s bases:\t\t {self.bases}")
 
     def receive(self, i):
-        qubits.ry(self.angles[self.bases[i]], ALICE)
-        qubits.measure(ALICE, ALICE)
+        qubits.ry(
+            self.angles[self.bases[i]], ALICE
+        )  # Rotate the qubit by the randomly chosen angle
+        qubits.measure(ALICE, ALICE)  # Measure the qubit after rotation
 
 
 class Bob:
-    angles = [pi / 4, pi / 2, 3 * pi / 4]
+    angles = [pi / 4, pi / 2, 3 * pi / 4]  # Possible angles for rotation
 
     def __init__(self):
         print(f"[{type(self).__name__}] Generating {b} random bases for the qubits...")
-        self.bases = randint(len(self.angles), size=b)
+        self.bases = randint(len(self.angles), size=b)  # Random bases for the qubits
         self.received_bits = zeros(b, dtype=int)
         self.key = ""
 
@@ -91,9 +90,6 @@ class Bob:
             f"\x1b[1D]\n{type(self).__name__}'s received bits:\t {bob.get_received_bits()}"
         )
 
-    def get_received_bit(self, i):
-        return self.received_bits[i]
-
     def set_received_bit(self, i, bit):
         self.received_bits[i] = bit
 
@@ -104,8 +100,10 @@ class Bob:
         print(f"{type(self).__name__}'s bases:\t\t {self.bases}")
 
     def receive(self, i):
-        qubits.ry(self.angles[self.bases[i]], BOB)
-        qubits.measure(BOB, BOB)
+        qubits.ry(
+            self.angles[self.bases[i]], BOB
+        )  # Rotate the qubit by the randomly chosen angle
+        qubits.measure(BOB, BOB)  # Measure the qubit after rotation
 
 
 class Charlie:
@@ -116,23 +114,31 @@ class Charlie:
         global qubits
 
         qubits_count = 3 if WITH_EVE else 2
-        qr = QuantumRegister(qubits_count, "qr")
-        cr = ClassicalRegister(qubits_count, "cr")
+        qr = QuantumRegister(qubits_count, "qr")  # Quantum register to store the qubits
+        cr = ClassicalRegister(
+            qubits_count, "cr"
+        )  # Classical register to store the measurement results
         qubits = QuantumCircuit(qr, cr)
 
-        qubits.h(qr[ALICE])
-        qubits.cx(qr[ALICE], qr[BOB])
+        qubits.h(
+            qr[ALICE]
+        )  # Apply Hadamard gate to Alice's qubit to create superposition
+        qubits.cx(qr[ALICE], qr[BOB])  # Apply CNOT gate to Bob's qubit to entangle it
         if WITH_EVE:
-            qubits.cx(qr[BOB], qr[EVE])
+            qubits.cx(
+                qr[BOB], qr[EVE]
+            )  # Apply CNOT gate to Eve's qubit to entangle it if is present
 
 
 class Eve:
-    possible_angles = [0, pi / 4, pi / 2]
+    possible_angles = [0, pi / 4, pi / 2]  # Possible angles for rotation
 
     def __init__(self):
         print(f"[{type(self).__name__}] Generating {b} random bases for the qubits...")
 
-        self.bases = randint(len(self.possible_angles), size=b)
+        self.bases = randint(
+            len(self.possible_angles), size=b
+        )  # Random bases for the qubits
         self.intercepted_bits = zeros(b, dtype=int)
         self.key = ""
 
@@ -152,9 +158,6 @@ class Eve:
         print(
             f"{type(self).__name__}'s intercepted bits:\t {eve.get_intercepted_bits()}"
         )
-
-    def get_intercepted_bit(self, i):
-        return self.intercepted_bits[i]
 
     def set_intercepted_bit(self, i, bit):
         self.intercepted_bits[i] = bit
@@ -196,6 +199,7 @@ def simulate(i):
     transpiled = transpile(qubits, backend)
     counts = backend.run(transpiled, shots=SHOTS).result().get_counts()
 
+    # Get the most probable state and set the received bit accordingly (due to little-endian encoding)
     measured_states = max(counts, key=counts.get)[::-1]
     alice.set_received_bit(i, int(measured_states[ALICE]))
     bob.set_received_bit(i, int(measured_states[BOB]))
@@ -206,10 +210,10 @@ def simulate(i):
 
 
 def calc_CHSH():
-    values = {
+    values = {  # Expected values for the nine possible combinations of bases
         (a, b): 0 for a in range(len(Alice.angles)) for b in range(len(Bob.angles))
     }
-    counts = {
+    counts = {  # Number of occurrences for the nine possible combinations of bases
         (a, b): 0 for a in range(len(Alice.angles)) for b in range(len(Bob.angles))
     }
 
@@ -217,18 +221,19 @@ def calc_CHSH():
         alice_basis = alice.get_bases()[i]
         bob_basis = bob.get_bases()[i]
 
-        alice_measure = -1 if alice.get_received_bit(i) == 0 else 1
-        bob_measure = -1 if bob.get_received_bit(i) == 0 else 1
+        # Map 0 to -1 and 1 to 1
+        alice_measure = -1 if alice.get_received_bits()[i] == 0 else 1
+        bob_measure = -1 if bob.get_received_bits()[i] == 0 else 1
 
+        # If they collapsed to the same result add 1, otherwise add -1
         values[(alice_basis, bob_basis)] += alice_measure * bob_measure
-        counts[(alice_basis, bob_basis)] += 1
+        counts[(alice_basis, bob_basis)] += 1  # Record the occurrence of the bases
 
     for pair in values:
         if counts[pair] > 0:
-            values[pair] /= counts[pair]
-        else:
-            values[pair] = 0
+            values[pair] /= counts[pair]  # Normalize the values
 
+    # Calculate the CHSH value according to the formula
     S = abs(values[(0, 0)] - values[(0, 2)] + values[(2, 0)] + values[(2, 2)])
 
     print(f"\nCHSH value (S):\t\t {S:.3f}")
@@ -239,18 +244,18 @@ def calc_CHSH():
 def calc_key():
     i = j = 0
 
+    # Get n bits from received bits where bases match
     while i < b and j < n:
         if alice.angles[alice.get_bases()[i]] == bob.angles[bob.get_bases()[i]]:
-            alice.append_key(alice.get_received_bit(i))
-            bob.append_key(bob.get_received_bit(i))
+            alice.append_key(alice.get_received_bits()[i])
+            bob.append_key(bob.get_received_bits()[i])
             if WITH_EVE:
                 eve.append_key(eve.get_intercepted_bits()[i])
 
             j += 1
-
         i += 1
 
-    if j < n:
+    if j < n:  # Retry if insufficient matching bases
         print(
             f"\nError: Insufficient number of matching bases ({j} < {n}). Will retry in {TIMEOUT} seconds..."
         )
