@@ -18,7 +18,7 @@ EVE = 2  # Qubit index for Eve
 THRESHOLD = 0.1  # Threshold for Bell's inequality
 CHSH_LIMIT = 2  # Maximum value of violation of Bell's inequality
 SHOTS = 1  # Number of shots for simulation
-WITH_EVE = False  # Whether to include Eve in the simulation
+WITH_EVE = True  # Whether to include Eve in the simulation
 TIMEOUT = 2  # Timeout for retrying in case of insufficient matching bases
 
 
@@ -33,35 +33,20 @@ class Alice:
         self.received_bits = zeros(b, dtype=int)
         self.key = ""
 
-    def get_key(self):
-        return self.key
-
     def print_key(self):
-        print(f"\n{type(self).__name__}'s key:\t\t {alice.get_key()}")
-
-    def append_key(self, key):
-        self.key += str(key)
-
-    def get_received_bits(self):
-        return self.received_bits
+        print(f"\n{type(self).__name__}'s key:\t\t {self.key}")
 
     def print_received_bits(self):
-        print(f"\n{type(self).__name__}'s received bits:\t [", end="")
-
-    def set_received_bit(self, i, bit):
-        self.received_bits[i] = bit
-
-    def get_bases(self):
-        return self.bases
+        print(f"\n{type(self).__name__}'s received bits:\t {self.received_bits}")
 
     def print_bases(self):
         print(f"\n{type(self).__name__}'s bases:\t\t {self.bases}")
 
     def receive(self, i):
-        qubits.ry(
+        qubits[i].ry(
             self.angles[self.bases[i]], ALICE
         )  # Rotate the qubit by the randomly chosen angle
-        qubits.measure(ALICE, ALICE)  # Measure the qubit after rotation
+        qubits[i].measure(ALICE, ALICE)  # Measure the qubit after rotation
 
 
 class Bob:
@@ -73,61 +58,44 @@ class Bob:
         self.received_bits = zeros(b, dtype=int)
         self.key = ""
 
-    def get_key(self):
-        return self.key
-
     def print_key(self):
-        print(f"{type(self).__name__}'s key:\t\t {bob.get_key()}")
-
-    def append_key(self, key):
-        self.key += str(key)
-
-    def get_received_bits(self):
-        return self.received_bits
+        print(f"{type(self).__name__}'s key:\t\t {self.key}")
 
     def print_received_bits(self):
-        print(
-            f"\x1b[1D]\n{type(self).__name__}'s received bits:\t {bob.get_received_bits()}"
-        )
-
-    def set_received_bit(self, i, bit):
-        self.received_bits[i] = bit
-
-    def get_bases(self):
-        return self.bases
+        print(f"\n{type(self).__name__}'s received bits:\t {self.received_bits}")
 
     def print_bases(self):
         print(f"{type(self).__name__}'s bases:\t\t {self.bases}")
 
     def receive(self, i):
-        qubits.ry(
+        qubits[i].ry(
             self.angles[self.bases[i]], BOB
         )  # Rotate the qubit by the randomly chosen angle
-        qubits.measure(BOB, BOB)  # Measure the qubit after rotation
+        qubits[i].measure(BOB, BOB)  # Measure the qubit after rotation
 
 
 class Charlie:
     def __init__(self):
         print(f"[{type(self).__name__}] Preparing qubit for transmission...")
 
-    def prepare_qubit(self):
-        global qubits
-
+    def send(self):
         qubits_count = 3 if WITH_EVE else 2
         qr = QuantumRegister(qubits_count, "qr")  # Quantum register to store the qubits
         cr = ClassicalRegister(
             qubits_count, "cr"
-        )  # Classical register to store the measurement results
-        qubits = QuantumCircuit(qr, cr)
+        )  # Classical register to store measurement results
+        qubit = QuantumCircuit(qr, cr)
 
-        qubits.h(
+        qubit.h(
             qr[ALICE]
         )  # Apply Hadamard gate to Alice's qubit to create superposition
-        qubits.cx(qr[ALICE], qr[BOB])  # Apply CNOT gate to Bob's qubit to entangle it
+        qubit.cx(qr[ALICE], qr[BOB])  # Apply CNOT gate to Bob's qubit to entangle it
         if WITH_EVE:
-            qubits.cx(
-                qr[BOB], qr[EVE]
+            qubit.cx(
+                qr[ALICE], qr[EVE]
             )  # Apply CNOT gate to Eve's qubit to entangle it if is present
+
+        qubits.append(qubit)
 
 
 class Eve:
@@ -142,35 +110,18 @@ class Eve:
         self.intercepted_bits = zeros(b, dtype=int)
         self.key = ""
 
-    def get_key(self):
-        return self.key
-
     def print_key(self):
-        print(f"{type(self).__name__}'s key:\t\t {eve.get_key()}")
-
-    def append_key(self, key):
-        self.key += str(key)
-
-    def get_intercepted_bits(self):
-        return self.intercepted_bits
+        print(f"{type(self).__name__}'s key:\t\t {self.key}")
 
     def print_intercepted_bits(self):
-        print(
-            f"{type(self).__name__}'s intercepted bits:\t {eve.get_intercepted_bits()}"
-        )
-
-    def set_intercepted_bit(self, i, bit):
-        self.intercepted_bits[i] = bit
-
-    def get_bases(self):
-        return self.bases
+        print(f"{type(self).__name__}'s intercepted bits:\t {self.intercepted_bits}")
 
     def print_bases(self):
         print(f"{type(self).__name__}'s bases:\t\t {self.bases}")
 
     def intercept(self, i):
-        qubits.ry(self.possible_angles[self.bases[i]], EVE)
-        qubits.measure(EVE, EVE)
+        qubits[i].ry(self.possible_angles[self.bases[i]], EVE)
+        qubits[i].measure(EVE, EVE)
 
 
 def print_parameters():
@@ -182,12 +133,13 @@ def print_parameters():
 
 
 def init_agents():
-    global alice, bob, charlie, eve
+    global alice, bob, charlie, eve, qubits
 
     alice = Alice()
     bob = Bob()
     charlie = Charlie()
     eve = Eve() if WITH_EVE else None
+    qubits = []
 
     alice.print_bases()
     if WITH_EVE:
@@ -195,18 +147,20 @@ def init_agents():
     bob.print_bases()
 
 
-def simulate(i):
+def simulate():
     transpiled = transpile(qubits, backend)
     counts = backend.run(transpiled, shots=SHOTS).result().get_counts()
 
-    # Get the most probable state and set the received bit accordingly (due to little-endian encoding)
-    measured_states = max(counts, key=counts.get)[::-1]
-    alice.set_received_bit(i, int(measured_states[ALICE]))
-    bob.set_received_bit(i, int(measured_states[BOB]))
-    if WITH_EVE:
-        eve.set_intercepted_bit(i, int(measured_states[EVE]))
+    for i in range(b):
+        # Get the most probable state and set the received bit accordingly (due to little-endian encoding)
+        measured_states = max(counts[i], key=counts[i].get)[::-1]
 
-    print(measured_states[ALICE], end=" ", flush=True)
+        alice.received_bits[i] = int(measured_states[ALICE])
+        bob.received_bits[i] = int(measured_states[BOB])
+        if WITH_EVE:
+            eve.intercepted_bits[i] = int(measured_states[EVE])
+
+    alice.print_received_bits()
 
 
 def calc_CHSH():
@@ -218,12 +172,12 @@ def calc_CHSH():
     }
 
     for i in range(b):
-        alice_basis = alice.get_bases()[i]
-        bob_basis = bob.get_bases()[i]
+        alice_basis = alice.bases[i]
+        bob_basis = bob.bases[i]
 
         # Map 0 to -1 and 1 to 1
-        alice_measure = -1 if alice.get_received_bits()[i] == 0 else 1
-        bob_measure = -1 if bob.get_received_bits()[i] == 0 else 1
+        alice_measure = -1 + 2 * alice.received_bits[i]
+        bob_measure = -1 + 2 * bob.received_bits[i]
 
         # If they collapsed to the same result add 1, otherwise add -1
         values[(alice_basis, bob_basis)] += alice_measure * bob_measure
@@ -246,11 +200,11 @@ def calc_key():
 
     # Get n bits from received bits where bases match
     while i < b and j < n:
-        if alice.angles[alice.get_bases()[i]] == bob.angles[bob.get_bases()[i]]:
-            alice.append_key(alice.get_received_bits()[i])
-            bob.append_key(bob.get_received_bits()[i])
+        if Alice.angles[alice.bases[i]] == Bob.angles[bob.bases[i]]:
+            alice.key += str(alice.received_bits[i])
+            bob.key += str(bob.received_bits[i])
             if WITH_EVE:
-                eve.append_key(eve.get_intercepted_bits()[i])
+                eve.key += str(eve.intercepted_bits[i])
 
             j += 1
         i += 1
@@ -276,17 +230,16 @@ def main():
 
     init_agents()
 
-    alice.print_received_bits()
-
+    # Key exchange phase
     for i in range(b):
-        charlie.prepare_qubit()
+        charlie.send()
 
         alice.receive(i)
         bob.receive(i)
         if WITH_EVE:
             eve.intercept(i)
 
-        simulate(i)
+    simulate()  # Simulation of quantum circuits
 
     bob.print_received_bits()
     if WITH_EVE:
@@ -298,7 +251,7 @@ def main():
 
     if S - CHSH_LIMIT < THRESHOLD:
         print(
-            "\nIntrusion detected! Bell's inequality is not violated, hence key is compromised."
+            "\nIntrusion detected! Bell's inequality is not violated, hence key communication compromised."
         )
 
 

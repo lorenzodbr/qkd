@@ -42,7 +42,6 @@ class Alice:
         )
 
     def send(self, i):
-        global qubits
         classical_bits_count = 2 if WITH_EVE else 1
 
         qubit = QuantumCircuit(1, classical_bits_count)
@@ -150,7 +149,6 @@ def init_agents():
     alice = Alice()
     bob = Bob()
     eve = Eve() if WITH_EVE else None
-    
     qubits = []
 
     alice.print_key()
