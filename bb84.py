@@ -19,6 +19,10 @@ SHOTS = 1  # Number of shots for simulation
 WITH_EVE = False  # Whether to include Eve in the simulation
 TIMEOUT = 2  # Timeout for retrying in case of insufficient matching bases
 
+ALICE = 0  # Index of Alice
+BOB = 1  # Index of Bob
+EVE = 2  # Index of Eve
+
 
 class Alice:
     def __init__(self):
@@ -27,14 +31,8 @@ class Alice:
         self.bases = choice([COMPUTATIONAL, HADAMARD], b)  # Random bases for the qubits
         self.key = randint(2, size=b)  # Random bits for the key
 
-    def get_key(self):
-        return self.key
-
     def print_key(self):
         print(f"\nKey:\t\t\t\t{self.key}\n")
-
-    def get_bases(self):
-        return self.bases
 
     def print_bases(self):
         print(
@@ -43,17 +41,16 @@ class Alice:
             + "]"
         )
 
-    def encode(self, bit, basis):
-        global qubit
-        qubit = QuantumCircuit(1, 1)
-
-        if bit == 1:
-            qubit.x(0)  # Apply NOT gate if bit is 1
-        if basis == HADAMARD:
-            qubit.h(0)  # Apply Hadamard gate if basis is 1 (Hadamard basis)
-
     def send(self, i):
-        self.encode(self.key[i], self.bases[i])
+        global qubit
+        classical_bits_count = 2 if WITH_EVE else 1
+
+        qubit = QuantumCircuit(1, classical_bits_count)
+
+        if self.key[i] == 1:
+            qubit.x(0)  # Apply NOT gate if bit is 1
+        if self.bases[i] == HADAMARD:
+            qubit.h(0)  # Apply Hadamard gate if basis is 1 (Hadamard basis)
 
 
 class Bob:
@@ -64,9 +61,6 @@ class Bob:
         self.matching_key = zeros(b, dtype=int)  # Key bits of matching bases
         self.matching_bases = []  # Indices of matching bases
 
-    def get_bases(self):
-        return self.bases
-
     def print_bases(self):
         print(
             f"{type(self).__name__}'s bases:\t\t\t["
@@ -74,36 +68,15 @@ class Bob:
             + "]"
         )
 
-    def get_received_key(self):
-        return self.received_key
-
-    def get_matching_key(self):
-        return self.matching_key
-
-    def get_matching_bases(self):
-        return self.matching_bases
-
-    def measure(self, basis):
-        if basis == HADAMARD:
+    def receive(self, i):
+        if self.bases[i] == HADAMARD:
             qubit.h(0)  # Change basis if necessary
 
-        qubit.measure(0, 0)  # Measurement device
-
-        # Simulation of the qubit measurement
-        transpiled = transpile(qubit, backend)
-        counts = backend.run(transpiled, shots=SHOTS).result().get_counts()
-        measured_bit = max(counts, key=counts.get)
-
-        print(measured_bit, end=" ", flush=True)
-
-        return measured_bit
-
-    def receive(self, i):
-        self.received_key[i] = self.measure(self.bases[i])
+        qubit.measure(0, BOB - 1)
 
     def check_bases_match(self):
         for i in range(b):
-            if alice.get_bases()[i] == self.bases[i]:
+            if alice.bases[i] == self.bases[i]:
                 self.matching_bases.append(i)  # Keep track of matching bases
                 self.matching_key[i] = self.received_key[i]
             else:
@@ -138,9 +111,6 @@ class Eve:
         self.bases = choice([COMPUTATIONAL, HADAMARD], b)  # Random bases for the qubits
         self.intercepted_key = zeros(b, dtype=int)
 
-    def get_bases(self):
-        return self.bases
-
     def print_bases(self):
         print(
             f"{type(self).__name__}'s bases:\t\t\t["
@@ -148,30 +118,17 @@ class Eve:
             + "]"
         )
 
-    def get_intercepted_key(self):
-        return self.intercepted_key
-
     def print_intercepted_key(self):
         print(
             f"\x1b[1D]\nKey intercepted by {type(self).__name__}: \t{self.intercepted_key}",
             end="",
         )
 
-    def measure(self, basis):
-        if basis == 1:
+    def intercept(self, i):
+        if self.bases[i] == HADAMARD:
             qubit.h(0)  # Basis change if necessary
 
-        qubit.measure(0, 0)  # Measurement device
-
-        # Interception of the qubit and measurement
-        transpiled = transpile(qubit, backend)
-        counts = backend.run(transpiled, shots=SHOTS).result().get_counts()
-        measured_bit = max(counts, key=counts.get)
-
-        return measured_bit
-
-    def intercept(self, i):
-        self.intercepted_key[i] = self.measure(self.bases[i])
+        qubit.measure(0, EVE - 1)
 
 
 def print_parameters():
@@ -196,11 +153,13 @@ def init_agents():
         eve.print_bases()
 
     bob.print_bases()
+    
+    print("\nKey received by Bob: \t\t[", end="")
 
 
 def choose_and_split_indices():
     # 2 * n random indices are selected among those of the matching bases
-    work_indices = bob.get_matching_bases()
+    work_indices = bob.matching_bases.copy()
     shuffle(work_indices)
     discarded_indices = work_indices[2 * n :]
     work_indices = work_indices[: 2 * n]
@@ -229,14 +188,14 @@ def check_intrusion(key_indices, check_indices):
     for i in range(n):
         # If no intrusion is being detected, the key is built
         if not intrusion_detected:
-            key += str(bob.get_matching_key()[key_indices[i]])
+            key += str(bob.matching_key[key_indices[i]])
         elif key is not None:
             key = None
 
         # Check if the bits revealed by Alice and Bob are different
         if (
-            bob.get_matching_key()[check_indices[i]]
-            != alice.get_key()[check_indices[i]]
+            bob.matching_key[check_indices[i]]
+            != alice.key[check_indices[i]]
         ):
             intrusion_detected = True
             mismatched_indices.append(check_indices[i])
@@ -254,15 +213,12 @@ def check_false_negative(key_indices, discarded_indices):
 
     # Check if the bits that do not match are among the key bits...
     for i in range(n):
-        if bob.get_matching_key()[key_indices[i]] != alice.get_key()[key_indices[i]]:
+        if bob.matching_key[key_indices[i]] != alice.key[key_indices[i]]:
             mismatched_indices.append(key_indices[i])
 
     # ...or among the discarded/extra bits
     for i in range(len(discarded_indices)):
-        if (
-            bob.get_matching_key()[discarded_indices[i]]
-            != alice.get_key()[discarded_indices[i]]
-        ):
+        if bob.matching_key[discarded_indices[i]] != alice.key[discarded_indices[i]]:
             mismatched_indices.append(discarded_indices[i])
 
     mismatched_indices = array(mismatched_indices)
@@ -273,24 +229,37 @@ def check_false_negative(key_indices, discarded_indices):
         )
 
 
+def simulate(i):
+    transpiled = transpile(qubit, backend)
+    counts = backend.run(transpiled, shots=SHOTS).result().get_counts()
+    measured_bits = max(counts, key=counts.get)[::-1]
+
+    bob.received_key[i] = int(measured_bits[BOB - 1])
+    
+    print(bob.received_key[i], end=" ", flush=True)
+
+    if WITH_EVE:
+        eve.intercepted_key[i] = int(measured_bits[EVE - 1])
+
+    if i == b - 1:
+        print("\x1b[1D]", end="")
+
+
 def main():
     print_parameters()
 
     init_agents()
 
-    print("\nKey received by Bob: \t\t[", end="")
-
     # Key exchange phase
     for i in range(b):
-        # Alice sends the qubit to Bob in the chosen basis
-        alice.send(i)
+        alice.send(i)  # Alice sends the qubit to Bob in the chosen basis
 
-        # If Eve is present, she intercepts the qubit
-        if WITH_EVE:
+        if WITH_EVE:  # If Eve is present, she intercepts the qubit
             eve.intercept(i)
 
-        # Bob measures the qubit in the chosen basis
-        bob.receive(i)
+        bob.receive(i)  # Bob measures the qubit in the chosen basis
+
+        simulate(i)  # Simulation of the quantum circuit
 
     if WITH_EVE:
         eve.print_intercepted_key()
