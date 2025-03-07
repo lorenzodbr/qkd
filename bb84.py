@@ -7,7 +7,7 @@ from qiskit_aer import AerSimulator
 
 alice = bob = eve = None  # Instances of the three agents
 backend = AerSimulator()  # Backend instance for simulation
-qubit = None  # Qubit to be sent
+qubits = None  # Qubit to be sent
 n = 8  # Final key length
 delta = 1  # Redundancy factor
 b = (4 + delta) * n  # Key length with redundancy
@@ -42,7 +42,7 @@ class Alice:
         )
 
     def send(self, i):
-        global qubit
+        global qubits
         classical_bits_count = 2 if WITH_EVE else 1
 
         qubit = QuantumCircuit(1, classical_bits_count)
@@ -51,6 +51,8 @@ class Alice:
             qubit.x(0)  # Apply NOT gate if bit is 1
         if self.bases[i] == HADAMARD:
             qubit.h(0)  # Apply Hadamard gate if basis is 1 (Hadamard basis)
+            
+        qubits.append(qubit)
 
 
 class Bob:
@@ -70,9 +72,12 @@ class Bob:
 
     def receive(self, i):
         if self.bases[i] == HADAMARD:
-            qubit.h(0)  # Change basis if necessary
+            qubits[i].h(0)  # Change basis if necessary
 
-        qubit.measure(0, BOB - 1)
+        qubits[i].measure(0, BOB - 1)
+        
+    def print_received_key(self):
+        print(f"\nKey received by {type(self).__name__}: \t\t{self.received_key}")
 
     def check_bases_match(self):
         for i in range(b):
@@ -86,7 +91,7 @@ class Bob:
 
         if matching_bases_count < 2 * n:  # Check if there are enough matching bases
             print(
-                f"\x1b[1D]\n\nMatching bases count ({matching_bases_count}) is less than {2 * n}."
+                f"Matching bases count ({matching_bases_count}) is less than {2 * n}."
                 + f" Will retry in {TIMEOUT} seconds..."
             )
             time.sleep(TIMEOUT)
@@ -98,7 +103,7 @@ class Bob:
         self.matching_bases = array(self.matching_bases)
 
         print(
-            f"\x1b[1D]\n\nMatching bases count: \t\t{matching_bases_count} ≥ {2 * n}"
+            f"\n\nMatching bases count: \t\t{matching_bases_count} ≥ {2 * n}"
             + f"\nMatching bases indices: \t{self.matching_bases}"
             + f"\n\nBits kept by {type(self).__name__}: \t\t[{' '.join([str(b) if b != MISMATCH else '-' for b in self.matching_key])}]"
         )
@@ -120,15 +125,15 @@ class Eve:
 
     def print_intercepted_key(self):
         print(
-            f"\x1b[1D]\nKey intercepted by {type(self).__name__}: \t{self.intercepted_key}",
+            f"\nKey intercepted by {type(self).__name__}: \t{self.intercepted_key}",
             end="",
         )
 
     def intercept(self, i):
         if self.bases[i] == HADAMARD:
-            qubit.h(0)  # Basis change if necessary
+            qubits[i].h(0)  # Basis change if necessary
 
-        qubit.measure(0, EVE - 1)
+        qubits[i].measure(0, EVE - 1)
 
 
 def print_parameters():
@@ -140,11 +145,13 @@ def print_parameters():
 
 
 def init_agents():
-    global alice, bob, eve
+    global alice, bob, eve, qubits
 
     alice = Alice()
     bob = Bob()
     eve = Eve() if WITH_EVE else None
+    
+    qubits = []
 
     alice.print_key()
     alice.print_bases()
@@ -153,8 +160,6 @@ def init_agents():
         eve.print_bases()
 
     bob.print_bases()
-    
-    print("\nKey received by Bob: \t\t[", end="")
 
 
 def choose_and_split_indices():
@@ -193,10 +198,7 @@ def check_intrusion(key_indices, check_indices):
             key = None
 
         # Check if the bits revealed by Alice and Bob are different
-        if (
-            bob.matching_key[check_indices[i]]
-            != alice.key[check_indices[i]]
-        ):
+        if bob.matching_key[check_indices[i]] != alice.key[check_indices[i]]:
             intrusion_detected = True
             mismatched_indices.append(check_indices[i])
 
@@ -229,20 +231,17 @@ def check_false_negative(key_indices, discarded_indices):
         )
 
 
-def simulate(i):
-    transpiled = transpile(qubit, backend)
+def simulate():
+    transpiled = transpile(qubits, backend)
     counts = backend.run(transpiled, shots=SHOTS).result().get_counts()
-    measured_bits = max(counts, key=counts.get)[::-1]
-
-    bob.received_key[i] = int(measured_bits[BOB - 1])
     
-    print(bob.received_key[i], end=" ", flush=True)
+    for i in range(b):
+        measured_bits = max(counts[i], key=counts[i].get)[::-1]
 
-    if WITH_EVE:
-        eve.intercepted_key[i] = int(measured_bits[EVE - 1])
+        bob.received_key[i] = int(measured_bits[BOB - 1])
 
-    if i == b - 1:
-        print("\x1b[1D]", end="")
+        if WITH_EVE:
+            eve.intercepted_key[i] = int(measured_bits[EVE - 1])
 
 
 def main():
@@ -252,14 +251,14 @@ def main():
 
     # Key exchange phase
     for i in range(b):
-        alice.send(i)  # Alice sends the qubit to Bob in the chosen basis
+        alice.send(i)  # Alice sends the i-th qubit to Bob in the chosen basis
 
-        if WITH_EVE:  # If Eve is present, she intercepts the qubit
+        if WITH_EVE:  # If Eve is present, she intercepts the i-th qubit
             eve.intercept(i)
 
-        bob.receive(i)  # Bob measures the qubit in the chosen basis
+        bob.receive(i)  # Bob measures the i-th qubit in the chosen basis
 
-        simulate(i)  # Simulation of the quantum circuit
+    simulate()  # Simulation of quantum circuits
 
     if WITH_EVE:
         eve.print_intercepted_key()
