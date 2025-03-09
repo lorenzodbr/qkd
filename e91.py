@@ -5,21 +5,23 @@ from numpy.random import randint
 from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister, transpile
 from qiskit_aer import AerSimulator
 
-alice = bob = charlie = eve = None  # Instances of the three agents
-backend = AerSimulator()  # Backend instance for simulation
-qubits = None  # Qubits to be sent
-n = 8  # Final key length
-delta = 1  # Redundancy factor
-b = (4 + delta) * n  # Number of qubits to be sent
+WITH_EVE = False  # Whether to include Eve in the simulation
+THRESHOLD = 0.1  # Threshold for Bell's inequality
+CHSH_LIMIT = 2  # Maximum value of violation of Bell's inequality
+SHOTS = 1  # Number of shots for simulation
+TIMEOUT = 2  # Timeout for retrying in case of insufficient matching bases
 
 ALICE = 0  # Qubit index for Alice
 BOB = 1  # Qubit index for Bob
 EVE = 2  # Qubit index for Eve
-THRESHOLD = 0.1  # Threshold for Bell's inequality
-CHSH_LIMIT = 2  # Maximum value of violation of Bell's inequality
-SHOTS = 1  # Number of shots for simulation
-WITH_EVE = True  # Whether to include Eve in the simulation
-TIMEOUT = 2  # Timeout for retrying in case of insufficient matching bases
+
+alice = bob = charlie = eve = None  # Instances of the three agents
+backend = AerSimulator()  # Backend instance for simulation
+qubits = None  # Qubits to be sent
+n = 100  # Final key length
+delta = 3  # Redundancy factor
+b = (4 + delta) * n  # Number of qubits to be sent
+qubits_count = 3 if WITH_EVE else 2
 
 
 class Alice:
@@ -62,7 +64,7 @@ class Bob:
         print(f"{type(self).__name__}'s key:\t\t {self.key}")
 
     def print_received_bits(self):
-        print(f"\n{type(self).__name__}'s received bits:\t {self.received_bits}")
+        print(f"{type(self).__name__}'s received bits:\t {self.received_bits}")
 
     def print_bases(self):
         print(f"{type(self).__name__}'s bases:\t\t {self.bases}")
@@ -78,8 +80,7 @@ class Charlie:
     def __init__(self):
         print(f"[{type(self).__name__}] Preparing qubit for transmission...")
 
-    def send(self):
-        qubits_count = 3 if WITH_EVE else 2
+    def send(self, i):
         qr = QuantumRegister(qubits_count, "qr")  # Quantum register to store the qubits
         cr = ClassicalRegister(
             qubits_count, "cr"
@@ -95,18 +96,16 @@ class Charlie:
                 qr[ALICE], qr[EVE]
             )  # Apply CNOT gate to Eve's qubit to entangle it if is present
 
-        qubits.append(qubit)
+        qubits[i] = qubit
 
 
 class Eve:
-    possible_angles = [0, pi / 4, pi / 2]  # Possible angles for rotation
+    angles = [0, pi / 4, pi / 2]  # Possible angles for rotation
 
     def __init__(self):
         print(f"[{type(self).__name__}] Generating {b} random bases for the qubits...")
 
-        self.bases = randint(
-            len(self.possible_angles), size=b
-        )  # Random bases for the qubits
+        self.bases = randint(len(self.angles), size=b)  # Random bases for the qubits
         self.intercepted_bits = zeros(b, dtype=int)
         self.key = ""
 
@@ -120,7 +119,7 @@ class Eve:
         print(f"{type(self).__name__}'s bases:\t\t {self.bases}")
 
     def intercept(self, i):
-        qubits[i].ry(self.possible_angles[self.bases[i]], EVE)
+        qubits[i].ry(self.angles[self.bases[i]], EVE)
         qubits[i].measure(EVE, EVE)
 
 
@@ -139,7 +138,7 @@ def init_agents():
     bob = Bob()
     charlie = Charlie()
     eve = Eve() if WITH_EVE else None
-    qubits = []
+    qubits = [None] * b
 
     alice.print_bases()
     if WITH_EVE:
@@ -167,9 +166,9 @@ def calc_CHSH():
     values = {  # Expected values for the nine possible combinations of bases
         (a, b): 0 for a in range(len(Alice.angles)) for b in range(len(Bob.angles))
     }
-    counts = {  # Number of occurrences for the nine possible combinations of bases
-        (a, b): 0 for a in range(len(Alice.angles)) for b in range(len(Bob.angles))
-    }
+    counts = (
+        values.copy()
+    )  # Number of occurrences for the nine possible combinations of bases
 
     for i in range(b):
         alice_basis = alice.bases[i]
@@ -232,12 +231,14 @@ def main():
 
     # Key exchange phase
     for i in range(b):
-        charlie.send()
+        charlie.send(i)
 
         alice.receive(i)
         bob.receive(i)
         if WITH_EVE:
             eve.intercept(i)
+
+    print(qubits[0])
 
     simulate()  # Simulation of quantum circuits
 

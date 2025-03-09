@@ -5,23 +5,23 @@ from numpy.random import randint, choice, shuffle
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
 
-alice = bob = eve = None  # Instances of the three agents
-backend = AerSimulator()  # Backend instance for simulation
-qubits = None  # Qubit to be sent
-n = 8  # Final key length
-delta = 1  # Redundancy factor
-b = (4 + delta) * n  # Key length with redundancy
-
+WITH_EVE = False  # Whether to include Eve in the simulation
 COMPUTATIONAL = 0  # Computational basis index
 HADAMARD = 1  # Hadamard basis index
 MISMATCH = -1  # Value to indicate mismatch in bases
 SHOTS = 1  # Number of shots for simulation
-WITH_EVE = False  # Whether to include Eve in the simulation
 TIMEOUT = 2  # Timeout for retrying in case of insufficient matching bases
 
-ALICE = 0  # Index of Alice
-BOB = 1  # Index of Bob
-EVE = 2  # Index of Eve
+BOB = 0  # Index of Bob
+EVE = 1  # Index of Eve
+
+alice = bob = eve = None  # Instances of the three agents
+backend = AerSimulator()  # Backend instance for simulation
+qubits = None  # Qubit to be sent
+n = 16  # Final key length
+delta = 1  # Redundancy factor
+b = (4 + delta) * n  # Key length with redundancy
+classical_bits_count = 2 if WITH_EVE else 1
 
 
 class Alice:
@@ -42,16 +42,12 @@ class Alice:
         )
 
     def send(self, i):
-        classical_bits_count = 2 if WITH_EVE else 1
-
-        qubit = QuantumCircuit(1, classical_bits_count)
+        qubits[i] = QuantumCircuit(1, classical_bits_count)
 
         if self.key[i] == 1:
-            qubit.x(0)  # Apply NOT gate if bit is 1
+            qubits[i].x(0)  # Apply NOT gate if bit is 1
         if self.bases[i] == HADAMARD:
-            qubit.h(0)  # Apply Hadamard gate if basis is 1 (Hadamard basis)
-            
-        qubits.append(qubit)
+            qubits[i].h(0)  # Apply Hadamard gate if basis is 1 (Hadamard basis)
 
 
 class Bob:
@@ -73,8 +69,8 @@ class Bob:
         if self.bases[i] == HADAMARD:
             qubits[i].h(0)  # Change basis if necessary
 
-        qubits[i].measure(0, BOB - 1)
-        
+        qubits[i].measure(0, BOB)
+
     def print_received_key(self):
         print(f"\nKey received by {type(self).__name__}: \t\t{self.received_key}")
 
@@ -102,7 +98,7 @@ class Bob:
         self.matching_bases = array(self.matching_bases)
 
         print(
-            f"\n\nMatching bases count: \t\t{matching_bases_count} ≥ {2 * n}"
+            f"\nMatching bases count: \t\t{matching_bases_count} ≥ {2 * n}"
             + f"\nMatching bases indices: \t{self.matching_bases}"
             + f"\n\nBits kept by {type(self).__name__}: \t\t[{' '.join([str(b) if b != MISMATCH else '-' for b in self.matching_key])}]"
         )
@@ -132,7 +128,7 @@ class Eve:
         if self.bases[i] == HADAMARD:
             qubits[i].h(0)  # Basis change if necessary
 
-        qubits[i].measure(0, EVE - 1)
+        qubits[i].measure(0, EVE)
 
 
 def print_parameters():
@@ -149,7 +145,8 @@ def init_agents():
     alice = Alice()
     bob = Bob()
     eve = Eve() if WITH_EVE else None
-    qubits = []
+
+    qubits = [None] * b
 
     alice.print_key()
     alice.print_bases()
@@ -232,14 +229,14 @@ def check_false_negative(key_indices, discarded_indices):
 def simulate():
     transpiled = transpile(qubits, backend)
     counts = backend.run(transpiled, shots=SHOTS).result().get_counts()
-    
+
     for i in range(b):
         measured_bits = max(counts[i], key=counts[i].get)[::-1]
 
-        bob.received_key[i] = int(measured_bits[BOB - 1])
+        bob.received_key[i] = int(measured_bits[BOB])
 
         if WITH_EVE:
-            eve.intercepted_key[i] = int(measured_bits[EVE - 1])
+            eve.intercepted_key[i] = int(measured_bits[EVE])
 
 
 def main():
