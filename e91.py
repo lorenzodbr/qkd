@@ -46,7 +46,7 @@ class Alice:
 
     def receive(self, i):
         qubits[i].ry(
-            self.angles[self.bases[i]], ALICE
+            -self.angles[self.bases[i]], ALICE
         )  # Rotate the qubit by the randomly chosen angle
         qubits[i].measure(ALICE, ALICE)  # Measure the qubit after rotation
 
@@ -71,7 +71,7 @@ class Bob:
 
     def receive(self, i):
         qubits[i].ry(
-            self.angles[self.bases[i]], BOB
+            -self.angles[self.bases[i]], BOB
         )  # Rotate the qubit by the randomly chosen angle
         qubits[i].measure(BOB, BOB)  # Measure the qubit after rotation
 
@@ -119,7 +119,7 @@ class Eve:
         print(f"{type(self).__name__}'s bases:\t\t {self.bases}")
 
     def intercept(self, i):
-        qubits[i].ry(self.angles[self.bases[i]], EVE)
+        qubits[i].ry(-self.angles[self.bases[i]], EVE)
         qubits[i].measure(EVE, EVE)
 
 
@@ -237,8 +237,6 @@ def main():
         bob.receive(i)
         if WITH_EVE:
             eve.intercept(i)
-
-    print(qubits[0])
 
     simulate()  # Simulation of quantum circuits
 
